@@ -1,0 +1,6 @@
+# VS Code history / backup
+.history/
+**/*.history
+
+# macOS
+.DS_Store
