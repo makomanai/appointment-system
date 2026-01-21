@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
@@ -41,75 +41,87 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center">
-          Company Pack Web
-        </h1>
-        <p className="text-gray-600 mb-6 text-center">
-          ログインしてください
-        </p>
+    <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+      <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center">
+        Company Pack Web
+      </h1>
+      <p className="text-gray-600 mb-6 text-center">
+        ログインしてください
+      </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
-
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              メールアドレス
-            </label>
-            <input
-              type="email"
-              id="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="example@company.com"
-            />
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            {error}
           </div>
+        )}
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              パスワード
-            </label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              placeholder="********"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className={`w-full py-3 rounded-lg font-medium transition-all ${
-              isLoading
-                ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                : "bg-blue-600 text-white hover:bg-blue-700"
-            }`}
+        <div>
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700 mb-1"
           >
-            {isLoading ? "ログイン中..." : "ログイン"}
-          </button>
-        </form>
+            メールアドレス
+          </label>
+          <input
+            type="email"
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            placeholder="example@company.com"
+          />
+        </div>
 
-        <p className="mt-6 text-xs text-gray-500 text-center">
-          アカウントをお持ちでない場合は管理者にお問い合わせください
-        </p>
-      </div>
+        <div>
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            パスワード
+          </label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            placeholder="********"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className={`w-full py-3 rounded-lg font-medium transition-all ${
+            isLoading
+              ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          }`}
+        >
+          {isLoading ? "ログイン中..." : "ログイン"}
+        </button>
+      </form>
+
+      <p className="mt-6 text-xs text-gray-500 text-center">
+        アカウントをお持ちでない場合は管理者にお問い合わせください
+      </p>
+    </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <Suspense fallback={
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+          <p className="text-center text-gray-500">読み込み中...</p>
+        </div>
+      }>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }
