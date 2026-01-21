@@ -37,6 +37,10 @@ export default function CompanySelector({ onSelect }: CompanySelectorProps) {
   const handleSelect = () => {
     const company = companies.find((c) => c.companyId === selectedId);
     if (company) {
+      console.log("=== [CompanySelector] 企業選択 ===");
+      console.log("選択された企業ID:", company.companyId);
+      console.log("選択された企業名:", company.companyName);
+      console.log("companyFileId:", company.companyFileId);
       onSelect({
         companyId: company.companyId,
         companyName: company.companyName,

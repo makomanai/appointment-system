@@ -30,12 +30,16 @@ export async function fetchCompanies(): Promise<Company[]> {
     url.searchParams.set("spreadsheetId", MASTER_SPREADSHEET_ID);
   }
 
+  console.log("[fetchCompanies] リクエストURL:", url.toString());
+
   const response = await fetch(url.toString(), {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    cache: "no-store",
+    redirect: "follow",
   });
+
+  console.log("[fetchCompanies] レスポンスステータス:", response.status);
+  console.log("[fetchCompanies] レスポンスURL:", response.url);
 
   if (!response.ok) {
     throw new Error(`GAS API error: ${response.status}`);
@@ -64,12 +68,16 @@ export async function fetchCallViewByCompany(
   url.searchParams.set("action", "getCallView");
   url.searchParams.set("spreadsheetId", companyFileId);
 
+  console.log("[fetchCallViewByCompany] リクエストURL:", url.toString());
+
   const response = await fetch(url.toString(), {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    cache: "no-store",
+    redirect: "follow",
   });
+
+  console.log("[fetchCallViewByCompany] レスポンスステータス:", response.status);
+  console.log("[fetchCallViewByCompany] レスポンスURL:", response.url);
 
   if (!response.ok) {
     throw new Error(`GAS API error: ${response.status}`);
@@ -92,12 +100,15 @@ export async function fetchSheetData(): Promise<SheetData[]> {
     throw new Error("GAS_ENDPOINT is not set");
   }
 
+  console.log("[fetchSheetData] リクエストURL:", GAS_ENDPOINT);
+
   const response = await fetch(GAS_ENDPOINT, {
     method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    cache: "no-store",
+    redirect: "follow",
   });
+
+  console.log("[fetchSheetData] レスポンスステータス:", response.status);
 
   if (!response.ok) {
     throw new Error(`GAS API error: ${response.status}`);

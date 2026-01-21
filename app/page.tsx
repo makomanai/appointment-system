@@ -6,7 +6,6 @@ import CenterPanel from "./components/CenterPanel";
 import RightPanel from "./components/RightPanel";
 import CompanySelector from "./components/CompanySelector";
 import CaseSidebar from "./components/CaseSidebar";
-import { mockCallViewData } from "./lib/mockData";
 import { CallViewData, CallResultForm, SelectedCompany } from "./types";
 
 // LocalStorageのキー
@@ -18,6 +17,8 @@ export default function Home() {
     useState<SelectedCompany | null>(null);
   // 企業選択状態の初期化フラグ
   const [isInitialized, setIsInitialized] = useState(false);
+  // データ再取得用のキー
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
   // 現在のインデックス
   const [currentIndex, setCurrentIndex] = useState(0);
   // データリスト（モックデータを使用）
@@ -49,35 +50,91 @@ export default function Home() {
   // 企業が選択されたらデータを取得
   useEffect(() => {
     if (!selectedCompany) {
+      console.log("[page.tsx] 企業が選択されていません");
       setDataList([]);
       return;
     }
 
+    // クロージャで最新の値をキャプチャ
+    const companyToFetch = { ...selectedCompany };
+
     const fetchData = async () => {
+      console.log("=== [page.tsx] データ取得開始 ===");
+      console.log("企業ID:", companyToFetch.companyId);
+      console.log("企業名:", companyToFetch.companyName);
+      console.log("companyFileId:", companyToFetch.companyFileId);
+      console.log("dataRefreshKey:", dataRefreshKey);
+
       setIsLoadingData(true);
       try {
-        // TODO: 実際のAPI呼び出しに置き換える
-        // const response = await fetch(`/api/call-view?companyFileId=${selectedCompany.companyFileId}`);
-        // const data = await response.json();
-        // const filteredData = data.filter((item: CallViewData) => item.priority === "A");
-        // setDataList(filteredData);
+        // タイムスタンプを追加してキャッシュを完全に回避
+        const timestamp = Date.now();
+        const apiUrl = `/api/call-view?companyFileId=${encodeURIComponent(companyToFetch.companyFileId)}&_t=${timestamp}`;
+        console.log("APIリクエスト:", apiUrl);
 
-        // 現在はモックデータを使用
+        const response = await fetch(apiUrl, {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+          },
+        });
+        const result = await response.json();
+
+        console.log("APIレスポンス:", {
+          success: result.success,
+          dataLength: result.data?.length,
+          error: result.error,
+        });
+
+        if (!result.success) {
+          throw new Error(result.error || "データの取得に失敗しました");
+        }
+
+        // APIレスポンスをCallViewData形式にマッピング
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mappedData: CallViewData[] = (result.data || []).map((item: any) => ({
+          councilDate: item.council || "",
+          agendaTitle: item.title || "",
+          agendaSummary: item.summary || "",
+          speakers: item.qa || "",
+          sourceUrl1: item.url || "",
+          sourceUrl2: "",
+          excerptRange: item.excerptRange || "",
+          excerptText: item.excerptText || "",
+          aiSummary: item.summary || "",
+          aiScript: "",
+          confirmedRelation: "",
+          scriptDraft: "",
+          status: item.status || "未着手",
+          priority: item.priority || "C",
+          callResult: item.callResult || "",
+          nextAction: item.nextAction || "",
+          nextDate: item.nextDate || "",
+          memo: item.memo || "",
+          companyRowKey: item.companyRowKey || "",
+        }));
+
         // 優先度Aのみをフィルタリング
-        const filteredData = mockCallViewData.filter(
+        const filteredData = mappedData.filter(
           (item) => item.priority === "A"
         );
+        console.log("マッピング後のデータ:", mappedData.length, "件");
+        console.log("優先度Aのデータ:", filteredData.length, "件");
+        console.log("最初のデータ:", filteredData[0]?.agendaTitle || "なし");
+
         setDataList(filteredData);
         setCurrentIndex(0);
       } catch (error) {
-        console.error("Failed to fetch data:", error);
+        console.error("[page.tsx] データ取得エラー:", error);
+        setDataList([]);
       } finally {
         setIsLoadingData(false);
+        console.log("=== [page.tsx] データ取得完了 ===");
       }
     };
 
     fetchData();
-  }, [selectedCompany]);
+  }, [selectedCompany, dataRefreshKey]);
 
   // 現在のデータ
   const currentData = dataList[currentIndex] || null;
@@ -87,13 +144,19 @@ export default function Home() {
 
   // 企業選択
   const handleCompanySelect = useCallback((company: SelectedCompany) => {
+    console.log("=== [page.tsx] 企業選択 ===");
+    console.log("選択された企業:", company);
     setSelectedCompany(company);
+    setDataRefreshKey((prev) => prev + 1); // データ再取得をトリガー
     localStorage.setItem(SELECTED_COMPANY_KEY, JSON.stringify(company));
   }, []);
 
   // 企業切り替え（選択画面に戻る）
   const handleChangeCompany = useCallback(() => {
+    console.log("=== [page.tsx] 企業変更（選択画面へ戻る） ===");
     setSelectedCompany(null);
+    setDataList([]); // データリストをクリア
+    setCurrentIndex(0);
     localStorage.removeItem(SELECTED_COMPANY_KEY);
   }, []);
 
@@ -156,21 +219,64 @@ export default function Home() {
 
   // AI生成処理
   const handleGenerateScript = useCallback(async () => {
+    if (!currentData) {
+      console.log("[handleGenerateScript] currentDataがありません");
+      return;
+    }
+
+    console.log("=== [page.tsx] AIスクリプト生成開始 ===");
+    console.log("対象:", currentData.agendaTitle);
+
     setIsGenerating(true);
     try {
-      // TODO: 実際のOpenAI API呼び出しに置き換える
-      console.log("AIスクリプト生成中...");
+      const response = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          councilDate: currentData.councilDate,
+          agendaTitle: currentData.agendaTitle,
+          agendaSummary: currentData.agendaSummary,
+          speakers: currentData.speakers,
+          excerptText: currentData.excerptText,
+          companyName: selectedCompany?.companyName,
+        }),
+      });
 
-      // シミュレーション
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const result = await response.json();
+
+      console.log("APIレスポンス:", {
+        success: result.success,
+        hasScript: !!result.script,
+        error: result.error,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "スクリプト生成に失敗しました");
+      }
+
+      // 現在のデータを更新（生成されたスクリプトを設定）
+      setDataList((prev) =>
+        prev.map((item, index) =>
+          index === currentIndex
+            ? {
+                ...item,
+                scriptDraft: result.script,
+                aiScript: result.script,
+              }
+            : item
+        )
+      );
 
       console.log("AIスクリプト生成完了");
     } catch (error) {
       console.error("AI生成エラー:", error);
+      alert(error instanceof Error ? error.message : "スクリプト生成に失敗しました");
     } finally {
       setIsGenerating(false);
     }
-  }, []);
+  }, [currentData, currentIndex, selectedCompany?.companyName]);
 
   // 前へ
   const handlePrevious = () => {
