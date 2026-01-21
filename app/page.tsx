@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useSession, signOut } from "next-auth/react";
 import LeftPanel from "./components/LeftPanel";
 import CenterPanel from "./components/CenterPanel";
 import RightPanel from "./components/RightPanel";
@@ -12,6 +13,9 @@ import { CallViewData, CallResultForm, SelectedCompany } from "./types";
 const SELECTED_COMPANY_KEY = "selectedCompany";
 
 export default function Home() {
+  // セッション情報
+  const { data: session } = useSession();
+
   // 選択中の企業
   const [selectedCompany, setSelectedCompany] =
     useState<SelectedCompany | null>(null);
@@ -436,6 +440,19 @@ export default function Home() {
                   {currentData.status}
                 </span>
               )}
+
+              {/* ユーザー情報・ログアウト */}
+              <div className="flex items-center gap-2 ml-2 pl-2 border-l border-gray-200">
+                <span className="hidden md:inline text-xs text-gray-500">
+                  {session?.user?.name || session?.user?.email}
+                </span>
+                <button
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="text-xs text-gray-500 hover:text-red-600 transition-colors"
+                >
+                  ログアウト
+                </button>
+              </div>
             </div>
           </div>
 
