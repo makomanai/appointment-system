@@ -1,15 +1,14 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { kv } from "@vercel/kv";
 
-// 許可されたユーザーを環境変数から取得
-// 形式: ALLOWED_USERS=email1:hashedPassword1,email2:hashedPassword2
-function getAllowedUsers(): Map<string, string> {
+// 環境変数から許可されたユーザーを取得（フォールバック用）
+function getAllowedUsersFromEnv(): Map<string, string> {
   const usersMap = new Map<string, string>();
   const usersEnv = process.env.ALLOWED_USERS || "";
 
   if (!usersEnv) {
-    console.warn("ALLOWED_USERS環境変数が設定されていません");
     return usersMap;
   }
 
@@ -22,6 +21,23 @@ function getAllowedUsers(): Map<string, string> {
   }
 
   return usersMap;
+}
+
+// KVまたは環境変数からユーザーのパスワードハッシュを取得
+async function getUserPassword(email: string): Promise<string | null> {
+  try {
+    // まずKVをチェック
+    const kvPassword = await kv.hget<string>("users", email);
+    if (kvPassword) {
+      return kvPassword;
+    }
+  } catch (error) {
+    console.log("KV接続エラー（環境変数にフォールバック）:", error);
+  }
+
+  // 環境変数にフォールバック
+  const envUsers = getAllowedUsersFromEnv();
+  return envUsers.get(email) || null;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -38,8 +54,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const allowedUsers = getAllowedUsers();
-        const hashedPassword = allowedUsers.get(credentials.email);
+        const hashedPassword = await getUserPassword(credentials.email);
 
         if (!hashedPassword) {
           console.log(`認証失敗: ユーザーが見つかりません - ${credentials.email}`);
@@ -85,7 +100,7 @@ export const authOptions: NextAuthOptions = {
   },
 };
 
-// パスワードハッシュ生成ヘルパー（ユーザー追加時に使用）
+// パスワードハッシュ生成ヘルパー
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }

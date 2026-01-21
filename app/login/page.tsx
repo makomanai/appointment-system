@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 function LoginForm() {
   const router = useRouter();
@@ -105,8 +106,11 @@ function LoginForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-xs text-gray-500 text-center">
-        アカウントをお持ちでない場合は管理者にお問い合わせください
+      <p className="mt-6 text-sm text-gray-600 text-center">
+        アカウントをお持ちでない方は{" "}
+        <Link href="/register" className="text-blue-600 hover:underline">
+          新規登録
+        </Link>
       </p>
     </div>
   );

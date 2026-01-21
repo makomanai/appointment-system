@@ -6,16 +6,17 @@ export default withAuth({
   },
 });
 
-// 保護するパスを指定（ログインページとAPIルートは除外）
+// 保護するパスを指定（ログインページ、登録ページ、APIルートは除外）
 export const config = {
   matcher: [
     /*
      * Match all request paths except:
      * - /login (ログインページ)
+     * - /register (新規登録ページ)
      * - /api/auth (認証APIルート)
      * - /_next (Next.jsの内部ルート)
      * - /favicon.ico, /images など静的ファイル
      */
-    "/((?!login|api/auth|_next|favicon.ico|images).*)",
+    "/((?!login|register|api/auth|_next|favicon.ico|images).*)",
   ],
 };
