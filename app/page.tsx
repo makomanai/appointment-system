@@ -91,7 +91,7 @@ export default function Home() {
         }
 
         // APIレスポンスをCallViewData形式にマッピング
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line
         const mappedData: CallViewData[] = (result.data || []).map((item: any) => ({
           councilDate: item.council || "",
           agendaTitle: item.title || "",
