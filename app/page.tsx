@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
 import LeftPanel from "./components/LeftPanel";
-import CenterPanel from "./components/CenterPanel";
+import CenterPanel, { ServiceOption } from "./components/CenterPanel";
 import RightPanel from "./components/RightPanel";
 import CompanySelector from "./components/CompanySelector";
 import CaseSidebar from "./components/CaseSidebar";
@@ -35,6 +35,10 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   // モバイルサイドバー開閉
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // サービス一覧
+  const [services, setServices] = useState<ServiceOption[]>([]);
+  // 選択中のサービスID
+  const [selectedServiceId, setSelectedServiceId] = useState<string>("");
 
   // 初回読み込み時にLocalStorageから企業情報を復元
   useEffect(() => {
@@ -140,6 +144,33 @@ export default function Home() {
     fetchData();
   }, [selectedCompany, dataRefreshKey]);
 
+  // 企業が選択されたらサービス一覧を取得
+  useEffect(() => {
+    if (!selectedCompany) {
+      setServices([]);
+      setSelectedServiceId("");
+      return;
+    }
+
+    const fetchServices = async () => {
+      try {
+        const response = await fetch(`/api/services?companyId=${selectedCompany.companyId}`);
+        const result = await response.json();
+        if (result.success) {
+          setServices(result.data || []);
+          // サービスが1つだけなら自動選択
+          if (result.data?.length === 1) {
+            setSelectedServiceId(result.data[0].id);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch services:", error);
+      }
+    };
+
+    fetchServices();
+  }, [selectedCompany]);
+
   // 現在のデータ
   const currentData = dataList[currentIndex] || null;
 
@@ -222,14 +253,27 @@ export default function Home() {
   );
 
   // AI生成処理
-  const handleGenerateScript = useCallback(async () => {
+  const handleGenerateScript = useCallback(async (serviceId: string) => {
     if (!currentData) {
       console.log("[handleGenerateScript] currentDataがありません");
       return;
     }
 
+    if (!serviceId) {
+      alert("サービスを選択してください");
+      return;
+    }
+
+    // 選択されたサービスの情報を取得
+    const selectedService = services.find(s => s.id === serviceId);
+    if (!selectedService) {
+      alert("サービス情報が見つかりません");
+      return;
+    }
+
     console.log("=== [page.tsx] AIスクリプト生成開始 ===");
     console.log("対象:", currentData.agendaTitle);
+    console.log("サービス:", selectedService.name);
 
     setIsGenerating(true);
     try {
@@ -245,6 +289,12 @@ export default function Home() {
           speakers: currentData.speakers,
           excerptText: currentData.excerptText,
           companyName: selectedCompany?.companyName,
+          serviceInfo: {
+            name: selectedService.name,
+            description: selectedService.description,
+            features: selectedService.features,
+            targetProblems: selectedService.targetProblems,
+          },
         }),
       });
 
@@ -280,7 +330,7 @@ export default function Home() {
     } finally {
       setIsGenerating(false);
     }
-  }, [currentData, currentIndex, selectedCompany?.companyName]);
+  }, [currentData, currentIndex, selectedCompany?.companyName, services]);
 
   // 前へ
   const handlePrevious = () => {
@@ -561,6 +611,9 @@ export default function Home() {
                   data={currentData}
                   onGenerateScript={handleGenerateScript}
                   isGenerating={isGenerating}
+                  services={services}
+                  selectedServiceId={selectedServiceId}
+                  onServiceChange={setSelectedServiceId}
                 />
               </div>
 

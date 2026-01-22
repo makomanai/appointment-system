@@ -3,10 +3,21 @@
 import { useState } from "react";
 import { CallViewData, SCRIPT_STEPS } from "@/app/types";
 
+export interface ServiceOption {
+  id: string;
+  name: string;
+  description: string;
+  features: string;
+  targetProblems: string;
+}
+
 interface CenterPanelProps {
   data: CallViewData | null;
-  onGenerateScript?: () => void;
+  onGenerateScript?: (serviceId: string) => void;
   isGenerating?: boolean;
+  services?: ServiceOption[];
+  selectedServiceId?: string;
+  onServiceChange?: (serviceId: string) => void;
 }
 
 // スクリプトをステップごとに分割する関数
@@ -70,6 +81,9 @@ export default function CenterPanel({
   data,
   onGenerateScript,
   isGenerating = false,
+  services = [],
+  selectedServiceId = "",
+  onServiceChange,
 }: CenterPanelProps) {
   const [activeTab, setActiveTab] = useState<string>("all");
 
@@ -97,19 +111,43 @@ export default function CenterPanel({
   return (
     <div className="bg-white rounded-lg shadow p-4 h-full flex flex-col">
       {/* ヘッダー */}
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-700">AIスクリプト</h2>
+      <div className="mb-4 pb-3 border-b border-gray-200">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-700">AIスクリプト</h2>
+        </div>
+
+        {/* サービス選択 */}
+        {services.length > 0 && (
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              紹介するサービス
+            </label>
+            <select
+              value={selectedServiceId}
+              onChange={(e) => onServiceChange?.(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">サービスを選択してください</option>
+              {services.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {onGenerateScript && (
           <button
-            onClick={onGenerateScript}
-            disabled={isGenerating}
-            className={`px-4 py-2 text-sm rounded-md transition-colors ${
-              isGenerating
+            onClick={() => onGenerateScript(selectedServiceId)}
+            disabled={isGenerating || !selectedServiceId}
+            className={`w-full px-4 py-2 text-sm rounded-md transition-colors ${
+              isGenerating || !selectedServiceId
                 ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                 : "bg-blue-600 hover:bg-blue-700 text-white"
             }`}
           >
-            {isGenerating ? "生成中..." : "AI生成"}
+            {isGenerating ? "生成中..." : !selectedServiceId ? "サービスを選択してください" : "AI生成"}
           </button>
         )}
       </div>

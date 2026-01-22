@@ -11,6 +11,13 @@ function getOpenAIClient() {
   });
 }
 
+interface ServiceInfo {
+  name: string;
+  description: string;
+  features: string;
+  targetProblems: string;
+}
+
 interface GenerateScriptRequest {
   councilDate: string;      // 議会/日付
   agendaTitle: string;      // 議題タイトル
@@ -18,6 +25,7 @@ interface GenerateScriptRequest {
   speakers: string;         // 質問者/回答者
   excerptText: string;      // 抜粋テキスト
   companyName?: string;     // 企業名（オプション）
+  serviceInfo?: ServiceInfo; // サービス情報
 }
 
 export async function POST(request: NextRequest) {
@@ -30,6 +38,7 @@ export async function POST(request: NextRequest) {
       councilDate: body.councilDate?.substring(0, 50),
       agendaTitle: body.agendaTitle?.substring(0, 50),
       hasExcerpt: !!body.excerptText,
+      serviceName: body.serviceInfo?.name || "なし",
     });
 
     if (!process.env.OPENAI_API_KEY) {
@@ -93,6 +102,15 @@ export async function POST(request: NextRequest) {
 各ステップは必ず【】で囲んだタイトルから始めてください。
 トークは自然な会話調で、具体的な議会内容を引用してください。`;
 
+    // サービス情報をフォーマット
+    const serviceSection = body.serviceInfo ? `
+■ 紹介するサービス情報
+- サービス名: ${body.serviceInfo.name}
+- サービス概要: ${body.serviceInfo.description || "なし"}
+- 主な機能・特徴: ${body.serviceInfo.features || "なし"}
+- 解決できる課題: ${body.serviceInfo.targetProblems || "なし"}
+` : "";
+
     const userPrompt = `以下の議会情報を基に、営業電話スクリプトを作成してください。
 
 ■ 議会情報
@@ -103,14 +121,15 @@ export async function POST(request: NextRequest) {
 
 ■ 抜粋テキスト（議会での発言内容）
 ${body.excerptText || "なし"}
-
+${serviceSection}
 ■ 作成のポイント
 1. 上記の議会での質問・答弁内容を具体的に引用してください
-2. 議会で議論された課題と、サービスがどのように解決につながるかを明確にリンクさせてください
-3. コーディネーターとして、情報交換・他都市事例共有という切り口で提案してください
-4. 「詳しくは企業担当者から」としつつも、サービスの概要と活用イメージは説明できるようにしてください
+2. 【重要】議会で議論された課題と、上記の「紹介するサービス」がどのように解決につながるかを具体的にリンクさせてください
+3. サービスの機能・特徴を踏まえて、自治体の課題解決にどう役立つかを説明してください
+4. コーディネーターとして、情報交換・他都市事例共有という切り口で提案してください
+5. 「詳しくは企業担当者から」としつつも、サービスの概要と活用イメージは説明できるようにしてください
 
-具体的な議会内容を引用した、説得力のある電話スクリプトを作成してください。`;
+具体的な議会内容とサービス情報を踏まえた、説得力のある電話スクリプトを作成してください。`;
 
     console.log("OpenAI API呼び出し開始...");
 
