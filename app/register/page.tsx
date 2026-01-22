@@ -6,6 +6,7 @@ import Link from "next/link";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [invitationCode, setInvitationCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -36,7 +37,7 @@ export default function RegisterPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, invitationCode }),
       });
 
       const data = await response.json();
@@ -79,6 +80,24 @@ export default function RegisterPage() {
               {success}
             </div>
           )}
+
+          <div>
+            <label
+              htmlFor="invitationCode"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              招待コード
+            </label>
+            <input
+              type="text"
+              id="invitationCode"
+              value={invitationCode}
+              onChange={(e) => setInvitationCode(e.target.value)}
+              required
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="招待コードを入力"
+            />
+          </div>
 
           <div>
             <label

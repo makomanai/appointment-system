@@ -4,7 +4,16 @@ import bcrypt from "bcryptjs";
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { email, password, invitationCode } = await request.json();
+
+    // 招待コードの検証
+    const validCode = process.env.INVITATION_CODE;
+    if (!validCode || invitationCode !== validCode) {
+      return NextResponse.json(
+        { error: "招待コードが正しくありません" },
+        { status: 400 }
+      );
+    }
 
     if (!email || !password) {
       return NextResponse.json(
