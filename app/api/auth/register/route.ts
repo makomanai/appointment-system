@@ -8,7 +8,13 @@ export async function POST(request: NextRequest) {
 
     // 招待コードの検証
     const validCode = process.env.INVITATION_CODE;
+    console.log("=== 招待コード検証 ===");
+    console.log("入力されたコード:", invitationCode);
+    console.log("環境変数のコード:", validCode);
+    console.log("一致:", invitationCode === validCode);
+
     if (!validCode || invitationCode !== validCode) {
+      console.log("招待コードエラー: validCode存在=", !!validCode, "一致=", invitationCode === validCode);
       return NextResponse.json(
         { error: "招待コードが正しくありません" },
         { status: 400 }
