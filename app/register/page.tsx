@@ -37,7 +37,7 @@ export default function RegisterPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password, invitationCode }),
+        body: JSON.stringify({ email: email.trim(), password, invitationCode: invitationCode.trim() }),
       });
 
       const data = await response.json();

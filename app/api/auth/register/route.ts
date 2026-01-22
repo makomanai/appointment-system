@@ -7,9 +7,11 @@ export async function POST(request: NextRequest) {
     const { email, password, invitationCode } = await request.json();
 
     // 招待コードの検証（環境変数またはハードコード）
-    const validCode = process.env.INVITATION_CODE || "bench2024";
+    const validCode = (process.env.INVITATION_CODE || "bench2024").trim();
+    const inputCode = (invitationCode || "").trim();
 
-    if (invitationCode !== validCode) {
+    if (inputCode !== validCode) {
+      console.log("招待コード不一致:", JSON.stringify({ input: inputCode, valid: validCode }));
       return NextResponse.json(
         { error: "招待コードが正しくありません" },
         { status: 400 }
