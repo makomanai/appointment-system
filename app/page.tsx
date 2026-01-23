@@ -77,7 +77,7 @@ export default function Home() {
       try {
         // タイムスタンプを追加してキャッシュを完全に回避
         const timestamp = Date.now();
-        const apiUrl = `/api/call-view?companyFileId=${encodeURIComponent(companyToFetch.companyFileId)}&_t=${timestamp}`;
+        const apiUrl = `/api/call-view?companyFileId=${encodeURIComponent(companyToFetch.companyFileId)}&companyId=${encodeURIComponent(companyToFetch.companyId)}&_t=${timestamp}`;
         console.log("APIリクエスト:", apiUrl);
 
         const response = await fetch(apiUrl, {
