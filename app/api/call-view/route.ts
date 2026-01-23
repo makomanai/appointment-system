@@ -10,11 +10,12 @@ interface UpdateCallViewRequest {
 export async function POST(request: NextRequest) {
   console.log("=== /api/call-view POST デバッグ情報 ===");
 
-  const gasEndpoint = process.env.GAS_ENDPOINT;
+  // 書き込み用は別エンドポイント（GAS_ENDPOINT_WRITE）を使用
+  const gasEndpoint = process.env.GAS_ENDPOINT_WRITE || process.env.GAS_ENDPOINT;
   if (!gasEndpoint) {
-    console.error("GAS_ENDPOINTが設定されていません");
+    console.error("GAS_ENDPOINT_WRITEが設定されていません");
     return NextResponse.json(
-      { success: false, error: "GAS_ENDPOINT is not configured" },
+      { success: false, error: "GAS_ENDPOINT_WRITE is not configured" },
       { status: 500 }
     );
   }
