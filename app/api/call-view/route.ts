@@ -1,4 +1,105 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CallResultForm } from "../../types";
+
+interface UpdateCallViewRequest {
+  companyFileId: string;
+  companyRowKey: string;
+  formData: CallResultForm;
+}
+
+export async function POST(request: NextRequest) {
+  console.log("=== /api/call-view POST デバッグ情報 ===");
+
+  const gasEndpoint = process.env.GAS_ENDPOINT;
+  if (!gasEndpoint) {
+    console.error("GAS_ENDPOINTが設定されていません");
+    return NextResponse.json(
+      { success: false, error: "GAS_ENDPOINT is not configured" },
+      { status: 500 }
+    );
+  }
+
+  try {
+    const body: UpdateCallViewRequest = await request.json();
+    console.log("リクエストボディ:", JSON.stringify(body, null, 2));
+
+    const { companyFileId, companyRowKey, formData } = body;
+
+    if (!companyFileId || !companyRowKey) {
+      return NextResponse.json(
+        { success: false, error: "companyFileId and companyRowKey are required" },
+        { status: 400 }
+      );
+    }
+
+    const response = await fetch(gasEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "updateCallView",
+        spreadsheetId: companyFileId,
+        rowKey: companyRowKey,
+        data: {
+          status: formData.status,
+          priority: formData.priority,
+          callResult: formData.callResult,
+          nextAction: formData.nextAction,
+          nextDate: formData.nextDate,
+          memo: formData.memo,
+        },
+      }),
+    });
+
+    console.log("GASレスポンスステータス:", response.status);
+
+    const responseText = await response.text();
+    console.log("GASレスポンス:", responseText.substring(0, 500));
+
+    if (responseText.startsWith("<!") || responseText.startsWith("<html")) {
+      console.error("GASがHTMLを返しました");
+      return NextResponse.json(
+        { success: false, error: "GAS returned HTML instead of JSON" },
+        { status: 500 }
+      );
+    }
+
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("JSONパースエラー:", parseError);
+      return NextResponse.json(
+        { success: false, error: "Failed to parse JSON response" },
+        { status: 500 }
+      );
+    }
+
+    // GASは "ok" または "success" を返す可能性がある
+    if (!response.ok || (!result.success && !result.ok)) {
+      console.error("GAS更新エラー:", result);
+      return NextResponse.json(
+        { success: false, error: result.error || "Failed to update call view data" },
+        { status: response.ok ? 500 : response.status }
+      );
+    }
+
+    console.log("call_viewデータ更新成功");
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("=== POSTエラー発生 ===");
+    console.error("エラー:", error instanceof Error ? error.message : "Unknown error");
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;

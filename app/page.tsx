@@ -198,9 +198,17 @@ export default function Home() {
   // 保存処理
   const handleSave = useCallback(
     async (formData: CallResultForm) => {
+      if (!selectedCompany?.companyFileId || !currentData?.companyRowKey) {
+        console.error("保存に必要な情報が不足しています", {
+          companyFileId: selectedCompany?.companyFileId,
+          companyRowKey: currentData?.companyRowKey,
+        });
+        alert("保存に必要な情報が不足しています（companyRowKeyが見つかりません）");
+        return;
+      }
+
       setIsSaving(true);
       try {
-        // TODO: 実際のAPI呼び出しに置き換える
         console.log("保存データ:", {
           companyId: selectedCompany?.companyId,
           companyFileId: selectedCompany?.companyFileId,
@@ -208,7 +216,26 @@ export default function Home() {
           ...formData,
         });
 
-        // データを更新
+        // APIを呼び出してスプレッドシートに保存
+        const response = await fetch("/api/call-view", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            companyFileId: selectedCompany.companyFileId,
+            companyRowKey: currentData.companyRowKey,
+            formData,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error || "保存に失敗しました");
+        }
+
+        // ローカルのデータも更新
         setDataList((prev) =>
           prev.map((item, index) =>
             index === currentIndex
@@ -225,10 +252,10 @@ export default function Home() {
           )
         );
 
-        // 成功メッセージ（後でトースト通知に置き換え）
         console.log("保存完了");
       } catch (error) {
         console.error("保存エラー:", error);
+        alert(error instanceof Error ? error.message : "保存に失敗しました");
       } finally {
         setIsSaving(false);
       }
