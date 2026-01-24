@@ -19,6 +19,13 @@ export default function AdminPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // CSVプレビュー用
+  const [csvPreview, setCsvPreview] = useState<{
+    headers: string[];
+    rows: string[][];
+    mappedHeaders: Record<string, string>;
+  } | null>(null);
+
   // AIランク付け用
   const [rankCompanyId, setRankCompanyId] = useState("");
   const [isRanking, setIsRanking] = useState(false);
@@ -62,12 +69,91 @@ export default function AdminPage() {
     fetchCompanies();
   }, []);
 
+  // ヘッダー名のマッピング
+  const headerMapping: Record<string, string> = {
+    企業ID: "company_id",
+    企業id: "company_id",
+    都道府県: "prefecture",
+    市町村: "city",
+    議会日付: "council_date",
+    "議会の日付": "council_date",
+    議題タイトル: "title",
+    タイトル: "title",
+    議題概要: "summary",
+    概要: "summary",
+    質問者: "questioner",
+    回答者: "answerer",
+    ソースURL: "source_url",
+    URL: "source_url",
+    グループID: "group_id",
+    group_id: "group_id",
+  };
+
+  // CSVをパースしてプレビュー
+  const parseCSVForPreview = (text: string) => {
+    const lines = text.split(/\r?\n/).filter((line) => line.trim());
+    if (lines.length < 1) return null;
+
+    // ヘッダー行をパース
+    const headers = parseCSVLine(lines[0]);
+
+    // マッピングを作成
+    const mappedHeaders: Record<string, string> = {};
+    headers.forEach((h) => {
+      const normalized = h.trim();
+      mappedHeaders[normalized] = headerMapping[normalized] || normalized.toLowerCase().replace(/\s+/g, "_");
+    });
+
+    // データ行（最大5行）
+    const rows: string[][] = [];
+    for (let i = 1; i < Math.min(lines.length, 6); i++) {
+      rows.push(parseCSVLine(lines[i]));
+    }
+
+    return { headers, rows, mappedHeaders };
+  };
+
+  // CSV行をパース（クォート対応）
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === "," && !inQuotes) {
+        result.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result;
+  };
+
   // ファイル選択
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
       setMessage(null);
+
+      // CSVをプレビュー用にパース
+      try {
+        const text = await selectedFile.text();
+        const preview = parseCSVForPreview(text);
+        setCsvPreview(preview);
+      } catch {
+        setCsvPreview(null);
+      }
     }
   };
 
@@ -195,6 +281,7 @@ export default function AdminPage() {
       if (result.success) {
         setMessage({ type: "success", text: result.message });
         setFile(null);
+        setCsvPreview(null);
         // ファイル入力をリセット
         const fileInput = document.getElementById("csv-file") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
@@ -278,6 +365,62 @@ export default function AdminPage() {
                 </p>
               )}
             </div>
+
+            {/* CSVプレビュー */}
+            {csvPreview && (
+              <div className="border border-blue-200 rounded-lg overflow-hidden">
+                <div className="bg-blue-50 px-3 py-2 border-b border-blue-200">
+                  <h4 className="text-sm font-medium text-blue-800">
+                    CSVプレビュー（先頭5行）
+                  </h4>
+                </div>
+
+                {/* カラムマッピング */}
+                <div className="px-3 py-2 bg-blue-50/50 border-b border-blue-100">
+                  <p className="text-xs text-blue-700 mb-1">カラムマッピング:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {csvPreview.headers.map((h, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center text-xs bg-white border border-blue-200 rounded px-2 py-0.5"
+                      >
+                        <span className="text-gray-600">{h}</span>
+                        <span className="mx-1 text-gray-400">→</span>
+                        <span className="text-blue-600 font-medium">
+                          {csvPreview.mappedHeaders[h]}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* データプレビュー */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        {csvPreview.headers.map((h, i) => (
+                          <th key={i} className="px-2 py-1 text-left text-gray-700 border-b">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {csvPreview.rows.map((row, rowIdx) => (
+                        <tr key={rowIdx} className="border-b border-gray-100">
+                          {row.map((cell, cellIdx) => (
+                            <td key={cellIdx} className="px-2 py-1 text-gray-800 max-w-[200px] truncate">
+                              {cell || <span className="text-gray-400">-</span>}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* メッセージ */}
             {message && (
