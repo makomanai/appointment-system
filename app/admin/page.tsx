@@ -63,7 +63,6 @@ export default function AdminPage() {
   } | null>(null);
 
   // 企業新規登録用
-  const [newCompanyId, setNewCompanyId] = useState("");
   const [newCompanyName, setNewCompanyName] = useState("");
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
 
@@ -239,8 +238,8 @@ export default function AdminPage() {
 
   // 企業新規登録
   const handleCreateCompany = async () => {
-    if (!newCompanyId || !newCompanyName) {
-      setMessage({ type: "error", text: "企業IDと企業名を入力してください" });
+    if (!newCompanyName) {
+      setMessage({ type: "error", text: "企業名を入力してください" });
       return;
     }
 
@@ -253,7 +252,6 @@ export default function AdminPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          company_id: newCompanyId,
           company_name: newCompanyName,
         }),
       });
@@ -261,8 +259,8 @@ export default function AdminPage() {
       const result = await response.json();
 
       if (result.success) {
-        setMessage({ type: "success", text: `企業「${newCompanyName}」を登録しました` });
-        setNewCompanyId("");
+        const newId = result.data?.company_id || "";
+        setMessage({ type: "success", text: `企業「${newCompanyName}」を登録しました（ID: ${newId}）` });
         setNewCompanyName("");
         // 企業一覧を再取得
         const refreshResponse = await fetch("/api/companies");
@@ -486,42 +484,29 @@ export default function AdminPage() {
           </h2>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {/* 企業ID */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  企業ID *
-                </label>
-                <input
-                  type="text"
-                  value={newCompanyId}
-                  onChange={(e) => setNewCompanyId(e.target.value)}
-                  placeholder="例: C011"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* 企業名 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  企業名 *
-                </label>
-                <input
-                  type="text"
-                  value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
-                  placeholder="例: 株式会社サンプル"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+            {/* 企業名 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業名 *
+              </label>
+              <input
+                type="text"
+                value={newCompanyName}
+                onChange={(e) => setNewCompanyName(e.target.value)}
+                placeholder="例: 株式会社サンプル"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                企業IDは自動で採番されます（C001, C002, ...）
+              </p>
             </div>
 
             {/* 登録ボタン */}
             <button
               onClick={handleCreateCompany}
-              disabled={isCreatingCompany || !newCompanyId || !newCompanyName}
+              disabled={isCreatingCompany || !newCompanyName}
               className={`w-full py-3 rounded-lg font-medium text-white ${
-                isCreatingCompany || !newCompanyId || !newCompanyName
+                isCreatingCompany || !newCompanyName
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-blue-600 hover:bg-blue-700"
               }`}

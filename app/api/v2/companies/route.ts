@@ -40,6 +40,34 @@ export async function GET() {
   }
 }
 
+// 次のcompany_idを自動生成（C001, C002, ... の形式）
+async function getNextCompanyId(supabase: ReturnType<typeof createServerSupabaseClient>): Promise<string> {
+  const { data } = await supabase
+    .from("companies")
+    .select("company_id")
+    .order("company_id", { ascending: false })
+    .limit(10);
+
+  if (!data || data.length === 0) {
+    return "C001";
+  }
+
+  // C001, C002 形式からIDを抽出して最大値を取得
+  let maxNum = 0;
+  for (const row of data) {
+    const match = row.company_id?.match(/^C(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+
+  const nextNum = maxNum + 1;
+  return `C${nextNum.toString().padStart(3, "0")}`;
+}
+
 // 企業追加
 export async function POST(request: NextRequest) {
   console.log("=== /api/v2/companies POST ===");
@@ -58,15 +86,19 @@ export async function POST(request: NextRequest) {
     console.log("リクエストボディ:", JSON.stringify(body, null, 2));
 
     // バリデーション
-    if (!body.company_id || !body.company_name) {
+    if (!body.company_name) {
       return NextResponse.json(
-        { success: false, error: "company_id と company_name は必須です" },
+        { success: false, error: "company_name は必須です" },
         { status: 400 }
       );
     }
 
+    // company_idを自動採番
+    const companyId = await getNextCompanyId(supabase);
+    console.log("自動採番されたcompany_id:", companyId);
+
     const insertData: InsertCompany = {
-      company_id: body.company_id,
+      company_id: companyId,
       company_name: body.company_name,
       company_file_id: body.company_file_id || null,
       script_base: body.script_base || null,
