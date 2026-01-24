@@ -16,6 +16,10 @@ interface CSVRow {
   end_sec?: string;
   excerpt_text?: string;
   excerpt_range?: string;
+  // 新規追加
+  external_id?: string;
+  category?: string;
+  stance?: string;
   [key: string]: string | undefined;
 }
 
@@ -96,6 +100,14 @@ function normalizeHeader(header: string): string {
     終了秒数: "end_sec",
     抽出テキスト: "excerpt_text",
     抽出範囲: "excerpt_range",
+    // 新規追加
+    議題ID: "external_id",
+    "議題id": "external_id",
+    external_id: "external_id",
+    カテゴリ: "category",
+    category: "category",
+    立場: "stance",
+    stance: "stance",
   };
 
   const normalized = header.trim().toLowerCase().replace(/\s+/g, "_");
@@ -175,6 +187,10 @@ export async function POST(request: NextRequest) {
       end_sec: row.end_sec ? parseInt(row.end_sec, 10) : null,
       excerpt_text: row.excerpt_text || null,
       excerpt_range: row.excerpt_range || null,
+      // 新規追加
+      external_id: row.external_id || null,
+      category: row.category || null,
+      stance: row.stance || null,
       status: "未着手",
       priority: "B", // 初期はBランク、AI判定後に更新
       dispatch_status: "NOT_SENT",

@@ -87,6 +87,11 @@ export default function AdminPage() {
     URL: "source_url",
     グループID: "group_id",
     group_id: "group_id",
+    開始秒数: "start_sec",
+    終了秒数: "end_sec",
+    議題ID: "external_id",
+    カテゴリ: "category",
+    立場: "stance",
   };
 
   // CSVをパースしてプレビュー
