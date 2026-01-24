@@ -122,15 +122,15 @@ export default function Home() {
           companyRowKey: item.companyRowKey || "",
         }));
 
-        // 優先度Aのみをフィルタリング
-        const filteredData = mappedData.filter(
-          (item) => item.priority === "A"
-        );
+        // 優先度順にソート（A > B > C）
+        const sortedData = mappedData.sort((a, b) => {
+          const priorityOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
+          return (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99);
+        });
         console.log("マッピング後のデータ:", mappedData.length, "件");
-        console.log("優先度Aのデータ:", filteredData.length, "件");
-        console.log("最初のデータ:", filteredData[0]?.agendaTitle || "なし");
+        console.log("最初のデータ:", sortedData[0]?.agendaTitle || "なし");
 
-        setDataList(filteredData);
+        setDataList(sortedData);
         setCurrentIndex(0);
       } catch (error) {
         console.error("[page.tsx] データ取得エラー:", error);
@@ -605,7 +605,7 @@ export default function Home() {
         {dataList.length === 0 ? (
           <div className="bg-white rounded-lg shadow-lg p-8 text-center">
             <p className="text-gray-600 mb-4">
-              この企業には優先度Aの案件がありません
+              この企業には案件がありません
             </p>
             <button
               onClick={handleChangeCompany}
