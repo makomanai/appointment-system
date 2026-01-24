@@ -31,7 +31,7 @@ export default function AdminPage() {
   const [isRanking, setIsRanking] = useState(false);
   const [rankResult, setRankResult] = useState<{ S: number; A: number; B: number; C: number } | null>(null);
 
-  // SRT読み込み用
+  // SRT読み込み用（手動）
   const [srtFile, setSrtFile] = useState<File | null>(null);
   const [srtGroupId, setSrtGroupId] = useState("");
   const [isParsingSrt, setIsParsingSrt] = useState(false);
@@ -40,6 +40,16 @@ export default function AdminPage() {
     skippedCount: number;
     topicsFound: number;
     srtEntries: number;
+  } | null>(null);
+
+  // SRT自動紐付け用（Google Drive）
+  const [autoLinkCompanyId, setAutoLinkCompanyId] = useState("");
+  const [isAutoLinking, setIsAutoLinking] = useState(false);
+  const [autoLinkResult, setAutoLinkResult] = useState<{
+    processed: number;
+    updated: number;
+    skipped: number;
+    failed: number;
   } | null>(null);
 
   // 認証チェック
@@ -166,6 +176,49 @@ export default function AdminPage() {
       setSrtFile(selectedFile);
       setSrtLinkResult(null);
       setMessage(null);
+    }
+  };
+
+  // SRT自動紐付け（Google Drive）
+  const handleAutoLink = async () => {
+    if (!autoLinkCompanyId) {
+      return;
+    }
+
+    setIsAutoLinking(true);
+    setAutoLinkResult(null);
+
+    try {
+      const response = await fetch("/api/v2/srt/auto-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyId: autoLinkCompanyId,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setAutoLinkResult({
+          processed: result.processed,
+          updated: result.updated,
+          skipped: result.skipped,
+          failed: result.failed,
+        });
+        setMessage({ type: "success", text: result.message });
+      } else {
+        setMessage({ type: "error", text: result.error || "自動紐付けに失敗しました" });
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "自動紐付けに失敗しました",
+      });
+    } finally {
+      setIsAutoLinking(false);
     }
   };
 
@@ -541,10 +594,88 @@ export default function AdminPage() {
           </div>
         </section>
 
-        {/* SRT読み込み・紐付けセクション */}
+        {/* SRT自動紐付けセクション（Google Drive） */}
         <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-lg font-bold text-gray-800 mb-4">
-            SRT字幕 → トピック紐付け
+            SRT字幕 自動紐付け（Google Drive連携）
+          </h2>
+
+          <div className="space-y-4">
+            {/* 企業選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業を選択 *
+              </label>
+              <select
+                value={autoLinkCompanyId}
+                onChange={(e) => setAutoLinkCompanyId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">-- 企業を選択 --</option>
+                {companies.map((company) => (
+                  <option key={company.companyId} value={company.companyId}>
+                    {company.companyId} - {company.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 自動紐付けボタン */}
+            <button
+              onClick={handleAutoLink}
+              disabled={isAutoLinking || !autoLinkCompanyId}
+              className={`w-full py-3 rounded-lg font-medium text-white ${
+                isAutoLinking || !autoLinkCompanyId
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-purple-600 hover:bg-purple-700"
+              }`}
+            >
+              {isAutoLinking ? "自動紐付け中..." : "Google DriveからSRTを自動取得・紐付け"}
+            </button>
+
+            {/* 結果表示 */}
+            {autoLinkResult && (
+              <div className="p-4 bg-purple-50 rounded-lg">
+                <h3 className="font-medium text-purple-800 mb-2">自動紐付け結果</h3>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white p-2 rounded border border-purple-200">
+                    <div className="text-xl font-bold text-green-600">{autoLinkResult.updated}</div>
+                    <div className="text-xs text-green-600">更新成功</div>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-purple-200">
+                    <div className="text-xl font-bold text-gray-600">{autoLinkResult.skipped}</div>
+                    <div className="text-xs text-gray-600">スキップ</div>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-purple-200">
+                    <div className="text-xl font-bold text-red-600">{autoLinkResult.failed}</div>
+                    <div className="text-xs text-red-600">失敗</div>
+                  </div>
+                </div>
+                <p className="text-xs text-purple-700 mt-2 text-center">
+                  {autoLinkResult.processed}件のトピックを処理
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 説明 */}
+          <div className="mt-6 p-4 bg-purple-50 rounded-lg">
+            <h3 className="text-sm font-medium text-purple-800 mb-2">
+              自動紐付けの仕組み
+            </h3>
+            <ol className="text-xs text-purple-700 space-y-1 list-decimal list-inside">
+              <li>選択した企業のトピック（抽出テキストが空のもの）を取得</li>
+              <li>各トピックのグループID（YouTube動画ID）を確認</li>
+              <li>Google Driveから該当するSRTファイルを自動取得</li>
+              <li>開始秒数〜終了秒数の範囲の字幕を抽出して保存</li>
+            </ol>
+          </div>
+        </section>
+
+        {/* SRT手動紐付けセクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">
+            SRT字幕 手動紐付け（ファイルアップロード）
           </h2>
 
           <div className="space-y-4">
@@ -558,11 +689,8 @@ export default function AdminPage() {
                 value={srtGroupId}
                 onChange={(e) => setSrtGroupId(e.target.value)}
                 placeholder="例: pdbwk0Yxe7g"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                CSVの「グループID」列と一致する値を入力
-              </p>
             </div>
 
             {/* SRTファイル選択 */}
@@ -575,7 +703,7 @@ export default function AdminPage() {
                 type="file"
                 accept=".srt"
                 onChange={handleSrtFileChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400"
               />
               {srtFile && (
                 <p className="text-sm text-gray-500 mt-1">
@@ -591,44 +719,28 @@ export default function AdminPage() {
               className={`w-full py-3 rounded-lg font-medium text-white ${
                 isParsingSrt || !srtFile || !srtGroupId
                   ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-purple-600 hover:bg-purple-700"
+                  : "bg-gray-600 hover:bg-gray-700"
               }`}
             >
-              {isParsingSrt ? "紐付け中..." : "SRTをトピックに紐付け"}
+              {isParsingSrt ? "紐付け中..." : "手動でSRTを紐付け"}
             </button>
 
             {/* 結果表示 */}
             {srtLinkResult && (
-              <div className="p-4 bg-purple-50 rounded-lg">
-                <h3 className="font-medium text-purple-800 mb-2">紐付け結果</h3>
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-medium text-gray-800 mb-2">紐付け結果</h3>
                 <div className="grid grid-cols-2 gap-2 text-center">
-                  <div className="bg-white p-2 rounded border border-purple-200">
+                  <div className="bg-white p-2 rounded border border-gray-200">
                     <div className="text-xl font-bold text-green-600">{srtLinkResult.updatedCount}</div>
                     <div className="text-xs text-green-600">更新成功</div>
                   </div>
-                  <div className="bg-white p-2 rounded border border-purple-200">
+                  <div className="bg-white p-2 rounded border border-gray-200">
                     <div className="text-xl font-bold text-gray-600">{srtLinkResult.skippedCount}</div>
                     <div className="text-xs text-gray-600">スキップ</div>
                   </div>
                 </div>
-                <p className="text-xs text-purple-700 mt-2 text-center">
-                  {srtLinkResult.topicsFound}件のトピックを検出 / SRT {srtLinkResult.srtEntries}エントリ
-                </p>
               </div>
             )}
-          </div>
-
-          {/* ワークフロー説明 */}
-          <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-            <h3 className="text-sm font-medium text-purple-800 mb-2">
-              ワークフロー
-            </h3>
-            <ol className="text-xs text-purple-700 space-y-1 list-decimal list-inside">
-              <li>CSVでトピックをインポート（グループID、開始秒数、終了秒数を含む）</li>
-              <li>同じグループIDのSRTファイルをアップロード</li>
-              <li>各トピックの時間範囲に該当する字幕テキストを自動抽出</li>
-              <li>メイン画面で「抽出テキスト」として表示される</li>
-            </ol>
           </div>
         </section>
 
