@@ -52,6 +52,11 @@ export default function AdminPage() {
     failed: number;
   } | null>(null);
 
+  // 企業新規登録用
+  const [newCompanyId, setNewCompanyId] = useState("");
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [isCreatingCompany, setIsCreatingCompany] = useState(false);
+
   // 認証チェック
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -222,6 +227,52 @@ export default function AdminPage() {
     }
   };
 
+  // 企業新規登録
+  const handleCreateCompany = async () => {
+    if (!newCompanyId || !newCompanyName) {
+      setMessage({ type: "error", text: "企業IDと企業名を入力してください" });
+      return;
+    }
+
+    setIsCreatingCompany(true);
+
+    try {
+      const response = await fetch("/api/v2/companies", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          company_id: newCompanyId,
+          company_name: newCompanyName,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessage({ type: "success", text: `企業「${newCompanyName}」を登録しました` });
+        setNewCompanyId("");
+        setNewCompanyName("");
+        // 企業一覧を再取得
+        const refreshResponse = await fetch("/api/companies");
+        const refreshResult = await refreshResponse.json();
+        if (refreshResult.success) {
+          setCompanies(refreshResult.data || []);
+        }
+      } else {
+        setMessage({ type: "error", text: result.error || "企業登録に失敗しました" });
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "企業登録に失敗しました",
+      });
+    } finally {
+      setIsCreatingCompany(false);
+    }
+  };
+
   // SRT紐付け処理
   const handleLinkSrt = async () => {
     if (!srtFile || !srtGroupId) {
@@ -361,14 +412,86 @@ export default function AdminPage() {
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-gray-800">管理画面</h1>
-            <a href="/" className="text-blue-600 hover:text-blue-800 text-sm">
-              ← メイン画面に戻る
-            </a>
+            <div className="flex items-center gap-4">
+              <a href="/services" className="text-purple-600 hover:text-purple-800 text-sm">
+                サービス管理
+              </a>
+              <a href="/" className="text-blue-600 hover:text-blue-800 text-sm">
+                ← メイン画面に戻る
+              </a>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* 企業新規登録セクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">
+            企業新規登録
+          </h2>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              {/* 企業ID */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  企業ID *
+                </label>
+                <input
+                  type="text"
+                  value={newCompanyId}
+                  onChange={(e) => setNewCompanyId(e.target.value)}
+                  placeholder="例: C011"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* 企業名 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  企業名 *
+                </label>
+                <input
+                  type="text"
+                  value={newCompanyName}
+                  onChange={(e) => setNewCompanyName(e.target.value)}
+                  placeholder="例: 株式会社サンプル"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* 登録ボタン */}
+            <button
+              onClick={handleCreateCompany}
+              disabled={isCreatingCompany || !newCompanyId || !newCompanyName}
+              className={`w-full py-3 rounded-lg font-medium text-white ${
+                isCreatingCompany || !newCompanyId || !newCompanyName
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {isCreatingCompany ? "登録中..." : "企業を登録"}
+            </button>
+
+            {/* 登録済み企業一覧 */}
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">登録済み企業 ({companies.length}件)</h3>
+              <div className="flex flex-wrap gap-2">
+                {companies.map((company) => (
+                  <span
+                    key={company.companyId}
+                    className="inline-block bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-600"
+                  >
+                    {company.companyId}: {company.companyName}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* CSVアップロードセクション */}
         <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-lg font-bold text-gray-800 mb-4">
