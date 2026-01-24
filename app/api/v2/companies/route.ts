@@ -97,10 +97,20 @@ export async function POST(request: NextRequest) {
     const companyId = await getNextCompanyId(supabase);
     console.log("自動採番されたcompany_id:", companyId);
 
+    // company_file_idを自動生成（互換性のため）
+    const generateFileId = () => {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+      let result = "";
+      for (let i = 0; i < 40; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    };
+
     const insertData: InsertCompany = {
       company_id: companyId,
       company_name: body.company_name,
-      company_file_id: body.company_file_id || null,
+      company_file_id: body.company_file_id || generateFileId(),
       script_base: body.script_base || null,
     };
 
