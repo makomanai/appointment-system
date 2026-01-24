@@ -42,6 +42,8 @@ export async function GET() {
 
 // 企業追加
 export async function POST(request: NextRequest) {
+  console.log("=== /api/v2/companies POST ===");
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
       { success: false, error: "Supabase is not configured" },
@@ -51,11 +53,30 @@ export async function POST(request: NextRequest) {
 
   try {
     const supabase = createServerSupabaseClient();
-    const body: InsertCompany = await request.json();
+    const body = await request.json();
+
+    console.log("リクエストボディ:", JSON.stringify(body, null, 2));
+
+    // バリデーション
+    if (!body.company_id || !body.company_name) {
+      return NextResponse.json(
+        { success: false, error: "company_id と company_name は必須です" },
+        { status: 400 }
+      );
+    }
+
+    const insertData: InsertCompany = {
+      company_id: body.company_id,
+      company_name: body.company_name,
+      company_file_id: body.company_file_id || null,
+      script_base: body.script_base || null,
+    };
+
+    console.log("挿入データ:", JSON.stringify(insertData, null, 2));
 
     const { data, error } = await supabase
       .from("companies")
-      .insert(body)
+      .insert(insertData)
       .select()
       .single();
 
