@@ -58,8 +58,9 @@ export interface Topic {
   priority: Priority;
   dispatch_status: DispatchStatus;
 
-  // AI生成スクリプト
+  // AI生成
   script_draft: string | null;
+  ai_summary: string | null;
 
   created_at: string;
   updated_at: string;

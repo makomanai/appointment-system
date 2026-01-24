@@ -166,6 +166,7 @@ export async function GET(request: NextRequest) {
         .from("topics")
         .select(`
           *,
+          ai_summary,
           call_results (
             call_result,
             next_action,
@@ -205,6 +206,7 @@ export async function GET(request: NextRequest) {
           url: topic.source_url || "",
           excerptText: topic.excerpt_text || "",
           excerptRange: topic.excerpt_range || "",
+          aiSummary: topic.ai_summary || "",
           status: topic.status || "未着手",
           priority: topic.priority || "A",
           callResult: latestCall?.call_result || "",

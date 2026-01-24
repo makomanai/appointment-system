@@ -52,6 +52,16 @@ export default function AdminPage() {
     failed: number;
   } | null>(null);
 
+  // AI要約生成用
+  const [summarizeCompanyId, setSummarizeCompanyId] = useState("");
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summarizeResult, setSummarizeResult] = useState<{
+    processed: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+  } | null>(null);
+
   // 企業新規登録用
   const [newCompanyId, setNewCompanyId] = useState("");
   const [newCompanyName, setNewCompanyName] = useState("");
@@ -313,6 +323,50 @@ export default function AdminPage() {
       });
     } finally {
       setIsParsingSrt(false);
+    }
+  };
+
+  // AI要約生成処理
+  const handleSummarize = async () => {
+    if (!summarizeCompanyId) {
+      return;
+    }
+
+    setIsSummarizing(true);
+    setSummarizeResult(null);
+
+    try {
+      const response = await fetch("/api/v2/topics/summarize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyId: summarizeCompanyId,
+          forceUpdate: false,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSummarizeResult({
+          processed: result.processed,
+          updated: result.updated,
+          skipped: result.skipped,
+          failed: result.failed,
+        });
+        setMessage({ type: "success", text: result.message });
+      } else {
+        setMessage({ type: "error", text: result.error || "AI要約生成に失敗しました" });
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "AI要約生成に失敗しました",
+      });
+    } finally {
+      setIsSummarizing(false);
     }
   };
 
@@ -717,6 +771,87 @@ export default function AdminPage() {
           </div>
         </section>
 
+        {/* AI要約生成セクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">
+            AI要約生成（抽出テキスト分析）
+          </h2>
+
+          <div className="space-y-4">
+            {/* 企業選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業を選択 *
+              </label>
+              <select
+                value={summarizeCompanyId}
+                onChange={(e) => setSummarizeCompanyId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">-- 企業を選択 --</option>
+                {companies.map((company) => (
+                  <option key={company.companyId} value={company.companyId}>
+                    {company.companyId} - {company.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* AI要約生成ボタン */}
+            <button
+              onClick={handleSummarize}
+              disabled={isSummarizing || !summarizeCompanyId}
+              className={`w-full py-3 rounded-lg font-medium text-white ${
+                isSummarizing || !summarizeCompanyId
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-indigo-600 hover:bg-indigo-700"
+              }`}
+            >
+              {isSummarizing ? "AI要約生成中..." : "AI要約を生成"}
+            </button>
+
+            {/* 結果表示 */}
+            {summarizeResult && (
+              <div className="p-4 bg-indigo-50 rounded-lg">
+                <h3 className="font-medium text-indigo-800 mb-2">AI要約生成結果</h3>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white p-2 rounded border border-indigo-200">
+                    <div className="text-xl font-bold text-green-600">{summarizeResult.updated}</div>
+                    <div className="text-xs text-green-600">生成成功</div>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-indigo-200">
+                    <div className="text-xl font-bold text-gray-600">{summarizeResult.skipped}</div>
+                    <div className="text-xs text-gray-600">スキップ</div>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-indigo-200">
+                    <div className="text-xl font-bold text-red-600">{summarizeResult.failed}</div>
+                    <div className="text-xs text-red-600">失敗</div>
+                  </div>
+                </div>
+                <p className="text-xs text-indigo-700 mt-2 text-center">
+                  {summarizeResult.processed}件のトピックを処理
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 説明 */}
+          <div className="mt-6 p-4 bg-indigo-50 rounded-lg">
+            <h3 className="text-sm font-medium text-indigo-800 mb-2">
+              AI要約の内容
+            </h3>
+            <ul className="text-xs text-indigo-700 space-y-1 list-disc list-inside">
+              <li><strong>質問要点:</strong> 質問者が何を問題視し、何を求めているか</li>
+              <li><strong>回答要点:</strong> 行政側がどう回答したか、具体的な取り組み</li>
+              <li><strong>キーワード:</strong> 予算、時期、システム、DXなどの重要語</li>
+              <li><strong>営業ポイント:</strong> アポイントに活かせる課題認識・導入意欲</li>
+            </ul>
+            <p className="text-xs text-indigo-600 mt-2">
+              ※ 抽出テキストがあり、AI要約がまだないトピックが対象
+            </p>
+          </div>
+        </section>
+
         {/* SRT自動紐付けセクション（Google Drive） */}
         <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-lg font-bold text-gray-800 mb-4">
@@ -883,7 +1018,11 @@ export default function AdminPage() {
             </li>
             <li className="flex items-center gap-2">
               <span className="text-green-500">✓</span>
-              SRT読み込み・抽出機能
+              AI要約生成（抽出テキスト分析）
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span>
+              SRT読み込み・抽出機能（Google Drive連携）
             </li>
             <li className="flex items-center gap-2">
               <span className="text-green-500">✓</span>

@@ -109,7 +109,7 @@ export default function Home() {
           sourceUrl2: "",
           excerptRange: item.excerptRange || "",
           excerptText: item.excerptText || "",
-          aiSummary: item.summary || "",
+          aiSummary: item.aiSummary || "",
           aiScript: "",
           confirmedRelation: "",
           scriptDraft: "",
