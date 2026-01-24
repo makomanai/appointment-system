@@ -35,15 +35,12 @@ export default function AdminPage() {
   const [srtFile, setSrtFile] = useState<File | null>(null);
   const [srtGroupId, setSrtGroupId] = useState("");
   const [isParsingSrt, setIsParsingSrt] = useState(false);
-  const [srtEntries, setSrtEntries] = useState<Array<{
-    index: number;
-    startTime: string;
-    endTime: string;
-    startSec: number;
-    endSec: number;
-    text: string;
-  }>>([]);
-  const [srtStats, setSrtStats] = useState<{ totalEntries: number; groupedEntries: number; totalDuration: number } | null>(null);
+  const [srtLinkResult, setSrtLinkResult] = useState<{
+    updatedCount: number;
+    skippedCount: number;
+    topicsFound: number;
+    srtEntries: number;
+  } | null>(null);
 
   // 認証チェック
   useEffect(() => {
@@ -167,31 +164,27 @@ export default function AdminPage() {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setSrtFile(selectedFile);
-      setSrtEntries([]);
-      setSrtStats(null);
+      setSrtLinkResult(null);
       setMessage(null);
     }
   };
 
-  // SRTパース処理
-  const handleParseSrt = async () => {
-    if (!srtFile) {
+  // SRT紐付け処理
+  const handleLinkSrt = async () => {
+    if (!srtFile || !srtGroupId) {
+      setMessage({ type: "error", text: "グループIDとSRTファイルを指定してください" });
       return;
     }
 
     setIsParsingSrt(true);
-    setSrtEntries([]);
-    setSrtStats(null);
+    setSrtLinkResult(null);
 
     try {
       const formData = new FormData();
       formData.append("file", srtFile);
-      formData.append("group", "true"); // グループ化オプション
-      if (srtGroupId) {
-        formData.append("groupId", srtGroupId);
-      }
+      formData.append("groupId", srtGroupId);
 
-      const response = await fetch("/api/v2/srt/parse", {
+      const response = await fetch("/api/v2/srt/link", {
         method: "POST",
         body: formData,
       });
@@ -199,27 +192,24 @@ export default function AdminPage() {
       const result = await response.json();
 
       if (result.success) {
-        setSrtEntries(result.entries);
-        setSrtStats(result.stats);
-        setMessage({ type: "success", text: `${result.stats.groupedEntries}個のセグメントを抽出しました` });
+        setSrtLinkResult({
+          updatedCount: result.updatedCount,
+          skippedCount: result.skippedCount,
+          topicsFound: result.topicsFound,
+          srtEntries: result.srtEntries,
+        });
+        setMessage({ type: "success", text: result.message });
       } else {
-        setMessage({ type: "error", text: result.error || "SRTの解析に失敗しました" });
+        setMessage({ type: "error", text: result.error || "SRTの紐付けに失敗しました" });
       }
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "SRTの解析に失敗しました",
+        text: error instanceof Error ? error.message : "SRTの紐付けに失敗しました",
       });
     } finally {
       setIsParsingSrt(false);
     }
-  };
-
-  // 秒数をタイムスタンプ形式に変換
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   // AIランク付け処理
@@ -551,25 +541,28 @@ export default function AdminPage() {
           </div>
         </section>
 
-        {/* SRT読み込みセクション */}
+        {/* SRT読み込み・紐付けセクション */}
         <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-lg font-bold text-gray-800 mb-4">
-            SRT読み込み・抽出
+            SRT字幕 → トピック紐付け
           </h2>
 
           <div className="space-y-4">
             {/* グループID入力 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                グループID（オプション）
+                グループID（YouTube動画ID）*
               </label>
               <input
                 type="text"
                 value={srtGroupId}
                 onChange={(e) => setSrtGroupId(e.target.value)}
-                placeholder="例: council_20240101_tokyo"
+                placeholder="例: pdbwk0Yxe7g"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                CSVの「グループID」列と一致する値を入力
+              </p>
             </div>
 
             {/* SRTファイル選択 */}
@@ -591,84 +584,51 @@ export default function AdminPage() {
               )}
             </div>
 
-            {/* 解析ボタン */}
+            {/* 紐付けボタン */}
             <button
-              onClick={handleParseSrt}
-              disabled={isParsingSrt || !srtFile}
+              onClick={handleLinkSrt}
+              disabled={isParsingSrt || !srtFile || !srtGroupId}
               className={`w-full py-3 rounded-lg font-medium text-white ${
-                isParsingSrt || !srtFile
+                isParsingSrt || !srtFile || !srtGroupId
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-purple-600 hover:bg-purple-700"
               }`}
             >
-              {isParsingSrt ? "解析中..." : "SRTを解析"}
+              {isParsingSrt ? "紐付け中..." : "SRTをトピックに紐付け"}
             </button>
 
-            {/* 統計情報 */}
-            {srtStats && (
+            {/* 結果表示 */}
+            {srtLinkResult && (
               <div className="p-4 bg-purple-50 rounded-lg">
-                <h3 className="font-medium text-purple-800 mb-2">解析結果</h3>
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <h3 className="font-medium text-purple-800 mb-2">紐付け結果</h3>
+                <div className="grid grid-cols-2 gap-2 text-center">
                   <div className="bg-white p-2 rounded border border-purple-200">
-                    <div className="text-xl font-bold text-purple-600">{srtStats.totalEntries}</div>
-                    <div className="text-xs text-purple-600">元エントリ数</div>
+                    <div className="text-xl font-bold text-green-600">{srtLinkResult.updatedCount}</div>
+                    <div className="text-xs text-green-600">更新成功</div>
                   </div>
                   <div className="bg-white p-2 rounded border border-purple-200">
-                    <div className="text-xl font-bold text-purple-600">{srtStats.groupedEntries}</div>
-                    <div className="text-xs text-purple-600">グループ化後</div>
-                  </div>
-                  <div className="bg-white p-2 rounded border border-purple-200">
-                    <div className="text-xl font-bold text-purple-600">{formatDuration(srtStats.totalDuration)}</div>
-                    <div className="text-xs text-purple-600">総再生時間</div>
+                    <div className="text-xl font-bold text-gray-600">{srtLinkResult.skippedCount}</div>
+                    <div className="text-xs text-gray-600">スキップ</div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* 抽出結果リスト */}
-            {srtEntries.length > 0 && (
-              <div className="border border-gray-200 rounded-lg max-h-96 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100 sticky top-0">
-                    <tr>
-                      <th className="px-3 py-2 text-left">#</th>
-                      <th className="px-3 py-2 text-left">時間</th>
-                      <th className="px-3 py-2 text-left">テキスト</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {srtEntries.slice(0, 50).map((entry, idx) => (
-                      <tr key={idx} className="border-t border-gray-100 hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-500">{entry.index}</td>
-                        <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
-                          {entry.startTime.substring(0, 8)} - {entry.endTime.substring(0, 8)}
-                        </td>
-                        <td className="px-3 py-2 text-gray-800">
-                          <div className="line-clamp-2">{entry.text}</div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {srtEntries.length > 50 && (
-                  <div className="p-3 bg-gray-50 text-center text-sm text-gray-600">
-                    他 {srtEntries.length - 50} 件のエントリ
-                  </div>
-                )}
+                <p className="text-xs text-purple-700 mt-2 text-center">
+                  {srtLinkResult.topicsFound}件のトピックを検出 / SRT {srtLinkResult.srtEntries}エントリ
+                </p>
               </div>
             )}
           </div>
 
-          {/* SRT形式の説明 */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">
-              SRT形式について
+          {/* ワークフロー説明 */}
+          <div className="mt-6 p-4 bg-purple-50 rounded-lg">
+            <h3 className="text-sm font-medium text-purple-800 mb-2">
+              ワークフロー
             </h3>
-            <p className="text-xs text-gray-600">
-              SRT（SubRip Subtitle）は字幕ファイルの標準形式です。
-              議会動画の字幕ファイルをアップロードすると、
-              連続するセグメントをグループ化してテキストを抽出します。
-            </p>
+            <ol className="text-xs text-purple-700 space-y-1 list-decimal list-inside">
+              <li>CSVでトピックをインポート（グループID、開始秒数、終了秒数を含む）</li>
+              <li>同じグループIDのSRTファイルをアップロード</li>
+              <li>各トピックの時間範囲に該当する字幕テキストを自動抽出</li>
+              <li>メイン画面で「抽出テキスト」として表示される</li>
+            </ol>
           </div>
         </section>
 
