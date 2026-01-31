@@ -43,6 +43,8 @@ export default function AdminPage() {
       rank: string;
       score: number;
       reasoning: string;
+      oldPriority?: string;
+      newPriority?: string;
     }>;
   } | null>(null);
 
@@ -874,6 +876,27 @@ export default function AdminPage() {
             {/* AI判定結果表示 */}
             {aiRankResult && (
               <div className="space-y-4">
+                {/* CSVエクスポートボタン */}
+                <button
+                  onClick={() => {
+                    const csvHeader = "トピックID,タイトル,AIランク,スコア,判定理由\n";
+                    const csvRows = aiRankResult.results.map(item =>
+                      `"${item.topicId}","${(item.title || "").replace(/"/g, '""')}","${item.rank}","${item.score}","${(item.reasoning || "").replace(/"/g, '""')}"`
+                    ).join("\n");
+                    const csvContent = csvHeader + csvRows;
+                    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = `ai_ranking_${aiRankCompanyId}_${new Date().toISOString().slice(0,10)}.csv`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="w-full py-2 rounded-lg font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 border border-purple-300"
+                >
+                  📥 判定結果をCSVダウンロード
+                </button>
+
                 {/* サマリー */}
                 <div className="p-4 bg-purple-50 rounded-lg">
                   <h3 className="font-medium text-purple-800 mb-2">AI判定結果サマリー</h3>
