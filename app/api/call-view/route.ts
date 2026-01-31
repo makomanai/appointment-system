@@ -183,6 +183,17 @@ export async function GET(request: NextRequest) {
         throw error;
       }
 
+      // デバッグ: 最初のトピックのprefecture/cityを確認
+      if (topics && topics.length > 0) {
+        console.log("最初のトピック:", {
+          id: topics[0].id,
+          prefecture: topics[0].prefecture,
+          city: topics[0].city,
+          council_date: topics[0].council_date,
+          title: topics[0].title?.substring(0, 30),
+        });
+      }
+
       // フロントエンド用の形式に変換
       const callViewData = (topics || []).map((topic) => {
         // 最新の架電結果を取得
