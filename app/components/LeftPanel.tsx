@@ -10,12 +10,21 @@ interface LeftPanelProps {
 // 自治体名を抽出する関数
 function extractMunicipalityName(councilDate: string): string {
   // "北海道苫小牧市議会 / 2025/12/09" → "北海道苫小牧市"
-  const match = councilDate.match(/^(.+?)(議会|市議会|区議会|町議会|村議会)/);
+  // または "北海道苫小牧市 / 2025/12/09" → "北海道苫小牧市"
+  const parts = councilDate.split(" / ");
+  const locationPart = parts[0]?.trim() || "";
+
+  if (!locationPart || locationPart === "/") {
+    return "";
+  }
+
+  // 議会を除去
+  const match = locationPart.match(/^(.+?)(議会|市議会|区議会|町議会|村議会)/);
   if (match) {
     return match[1];
   }
-  // フォールバック: スラッシュの前を取得
-  return councilDate.split(" / ")[0].replace(/議会$/, "");
+
+  return locationPart;
 }
 
 // 議会日付を抽出する関数
@@ -23,7 +32,7 @@ function extractCouncilDate(councilDate: string): string {
   // "北海道苫小牧市議会 / 2025/12/09" → "2025/12/09"
   const parts = councilDate.split(" / ");
   if (parts.length >= 2) {
-    return parts[1];
+    return parts[1]?.trim() || "";
   }
   return "";
 }
@@ -73,7 +82,9 @@ export default function LeftPanel({ data, keywords = [] }: LeftPanelProps) {
       {/* 自治体名 - 大きく目立つように表示 */}
       <div className="mb-4 pb-3 border-b-2 border-blue-500">
         <div className="bg-blue-600 text-white px-4 py-3 rounded-lg mb-2">
-          <h2 className="text-2xl font-bold tracking-wide">{municipalityName}</h2>
+          <h2 className="text-2xl font-bold tracking-wide">
+            {municipalityName || "（自治体未設定）"}
+          </h2>
         </div>
         {councilDate && (
           <p className="text-sm text-gray-600 mt-2">
