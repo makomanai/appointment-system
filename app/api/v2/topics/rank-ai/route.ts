@@ -28,14 +28,17 @@ interface RankResult {
   };
 }
 
-// AIによるランク判定
+// AIによるランク判定（REST API直接呼び出し）
 async function rankWithAI(
   title: string,
   summary: string,
   excerptText: string,
   serviceInfo?: string
 ): Promise<RankResult> {
-  const openai = getOpenAIClient();
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
 
   const systemPrompt = `あなたは自治体向けソリューション営業の専門家です。
 議会議事録の内容を分析し、営業リードとしての優先度を判定してください。
@@ -93,9 +96,10 @@ ${excerptText || "（発言内容なし）"}
 JSON形式で判定結果を出力してください。`;
 
   try {
-    console.log("Calling OpenAI with model: gpt-5.2-2025-12-11");
+    console.log("Calling OpenAI REST API with model: gpt-5.2-2025-12-11");
 
-    const completion = await openai.chat.completions.create({
+    // GPT-5.2用のリクエストボディ
+    const requestBody = {
       model: "gpt-5.2-2025-12-11",
       messages: [
         { role: "system", content: systemPrompt },
@@ -104,9 +108,25 @@ JSON形式で判定結果を出力してください。`;
       temperature: 0.2,
       max_completion_tokens: 500,
       response_format: { type: "json_object" },
+    };
+
+    // REST API直接呼び出し
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
     });
 
-    const content = completion.choices[0]?.message?.content || "{}";
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || `API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "{}";
     console.log("OpenAI response:", content.substring(0, 200));
 
     const result = JSON.parse(content);
