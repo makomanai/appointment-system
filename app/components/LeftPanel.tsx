@@ -18,6 +18,16 @@ function extractMunicipalityName(councilDate: string): string {
   return councilDate.split(" / ")[0].replace(/議会$/, "");
 }
 
+// 議会日付を抽出する関数
+function extractCouncilDate(councilDate: string): string {
+  // "北海道苫小牧市議会 / 2025/12/09" → "2025/12/09"
+  const parts = councilDate.split(" / ");
+  if (parts.length >= 2) {
+    return parts[1];
+  }
+  return "";
+}
+
 // キーワードハイライト関数
 function highlightKeywords(text: string, keywords: string[]): React.ReactNode {
   if (!keywords || keywords.length === 0) return text;
@@ -50,6 +60,7 @@ export default function LeftPanel({ data, keywords = [] }: LeftPanelProps) {
   }
 
   const municipalityName = extractMunicipalityName(data.councilDate);
+  const councilDate = extractCouncilDate(data.councilDate);
 
   // Google検索を開く
   const openGoogleSearch = (query: string) => {
@@ -59,9 +70,16 @@ export default function LeftPanel({ data, keywords = [] }: LeftPanelProps) {
 
   return (
     <div className="bg-white rounded-lg shadow p-4 h-full overflow-y-auto">
-      {/* 議会/日付 - 大きく表示 */}
-      <div className="mb-4 pb-3 border-b border-gray-200">
-        <h2 className="text-xl font-bold text-blue-800">{data.councilDate}</h2>
+      {/* 自治体名 - 大きく目立つように表示 */}
+      <div className="mb-4 pb-3 border-b-2 border-blue-500">
+        <div className="bg-blue-600 text-white px-4 py-3 rounded-lg mb-2">
+          <h2 className="text-2xl font-bold tracking-wide">{municipalityName}</h2>
+        </div>
+        {councilDate && (
+          <p className="text-sm text-gray-600 mt-2">
+            議会日: <span className="font-medium text-gray-800">{councilDate}</span>
+          </p>
+        )}
       </div>
 
       {/* 議題タイトル */}
