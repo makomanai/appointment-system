@@ -92,20 +92,23 @@ ${excerptText || "（発言内容なし）"}
 
 JSON形式で判定結果を出力してください。`;
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-5.2-2025-12-11",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    temperature: 0.2,
-    max_tokens: 500,
-    response_format: { type: "json_object" },
-  });
-
-  const content = completion.choices[0]?.message?.content || "{}";
-
   try {
+    console.log("Calling OpenAI with model: gpt-5.2-2025-12-11");
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-5.2-2025-12-11",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 500,
+      response_format: { type: "json_object" },
+    });
+
+    const content = completion.choices[0]?.message?.content || "{}";
+    console.log("OpenAI response:", content.substring(0, 200));
+
     const result = JSON.parse(content);
     return {
       rank: result.rank || "C",
@@ -113,14 +116,10 @@ JSON形式で判定結果を出力してください。`;
       reasoning: result.reasoning || "",
       keyPoints: result.keyPoints || { positive: [], negative: [] },
     };
-  } catch {
-    console.error("Failed to parse AI response:", content);
-    return {
-      rank: "C",
-      score: 0,
-      reasoning: "判定エラー",
-      keyPoints: { positive: [], negative: [] },
-    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown API error";
+    console.error("OpenAI API error:", errorMsg);
+    throw new Error(errorMsg);
   }
 }
 
@@ -303,7 +302,9 @@ export async function POST(request: NextRequest) {
             .eq("id", topic.id);
         }
       } catch (err) {
-        console.error(`Error ranking topic ${topic.id}:`, err);
+        const errorMessage = err instanceof Error ? err.message : "Unknown error";
+        console.error(`Error ranking topic ${topic.id}:`, errorMessage);
+        console.error("Full error:", err);
         results.push({
           topicId: topic.id,
           title: topic.title,
@@ -311,9 +312,9 @@ export async function POST(request: NextRequest) {
           newPriority: topic.priority,
           rank: "C" as const,
           score: 0,
-          reasoning: "判定エラー",
+          reasoning: `判定エラー: ${errorMessage}`,
           keyPoints: { positive: [], negative: [] },
-          error: err instanceof Error ? err.message : "Unknown error",
+          error: errorMessage,
         });
       }
     }
