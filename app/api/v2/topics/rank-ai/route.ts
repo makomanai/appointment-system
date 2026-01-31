@@ -93,7 +93,7 @@ ${excerptText || "（発言内容なし）"}
 JSON形式で判定結果を出力してください。`;
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-5.2",
+    model: "gpt-5.2-2025-12-11",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
