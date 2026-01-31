@@ -94,6 +94,13 @@ export default function Home() {
           error: result.error,
         });
 
+        // デバッグ: 最初のデータのexcerptTextを確認
+        if (result.data && result.data.length > 0) {
+          console.log("=== excerptText デバッグ ===");
+          console.log("最初のexcerptText:", result.data[0].excerptText?.substring(0, 100) || "なし");
+          console.log("最初のaiSummary:", result.data[0].aiSummary?.substring(0, 100) || "なし");
+        }
+
         if (!result.success) {
           throw new Error(result.error || "データの取得に失敗しました");
         }

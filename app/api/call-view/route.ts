@@ -183,14 +183,19 @@ export async function GET(request: NextRequest) {
         throw error;
       }
 
-      // デバッグ: 最初のトピックのprefecture/cityを確認
+      // デバッグ: 最初のトピックのデータを確認
       if (topics && topics.length > 0) {
+        console.log("=== call-view デバッグ ===");
+        console.log("取得トピック数:", topics.length);
         console.log("最初のトピック:", {
           id: topics[0].id,
           prefecture: topics[0].prefecture,
           city: topics[0].city,
           council_date: topics[0].council_date,
           title: topics[0].title?.substring(0, 30),
+          excerpt_text_length: topics[0].excerpt_text?.length || 0,
+          excerpt_text_preview: topics[0].excerpt_text?.substring(0, 50) || "NULL",
+          ai_summary_length: topics[0].ai_summary?.length || 0,
         });
       }
 
