@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
       title: string;
       status: string;
       reason?: string;
+      excerptLength?: number;
     }> = [];
 
     for (const topic of topicsToProcess) {
@@ -186,10 +187,15 @@ export async function POST(request: NextRequest) {
       }
 
       // トピックを更新
-      const { error: updateError } = await supabase
+      console.log(`Updating topic ${topic.id} with excerpt_text length: ${excerptText.length}`);
+
+      const { data: updateData, error: updateError } = await supabase
         .from("topics")
         .update({ excerpt_text: excerptText })
-        .eq("id", topic.id);
+        .eq("id", topic.id)
+        .select("id, excerpt_text");
+
+      console.log(`Update result:`, { updateData, updateError });
 
       if (updateError) {
         failed++;
@@ -199,12 +205,21 @@ export async function POST(request: NextRequest) {
           status: "error",
           reason: updateError.message,
         });
+      } else if (!updateData || updateData.length === 0) {
+        failed++;
+        results.push({
+          topicId: topic.id,
+          title: topic.title || "",
+          status: "error",
+          reason: "Update returned no data - topic may not exist",
+        });
       } else {
         updated++;
         results.push({
           topicId: topic.id,
           title: topic.title || "",
           status: "updated",
+          excerptLength: excerptText.length,
         });
       }
     }
