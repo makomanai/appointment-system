@@ -41,23 +41,33 @@ async function rankWithAI(
   }
 
   const systemPrompt = `あなたは自治体向けソリューション営業の専門家です。
-議会議事録の内容を分析し、営業リードとしての優先度を判定してください。
+議会議事録の内容を分析し、【対象サービス】との関連性を考慮して営業リードとしての優先度を判定してください。
+
+## 最重要: サービスとの関連性
+
+【対象サービス】が提供されている場合、そのサービスと議題の関連性を最優先で判断してください。
+- サービスの機能・特徴と議題の課題が一致するか
+- サービスが解決できる問題について議論されているか
+- サービスのターゲット領域（児童福祉、DX、業務効率化など）と合致するか
+
+**関連性が低い議題は、他の条件が良くてもBランク以下としてください。**
 
 ## 判定基準
 
-### 高優先度（S/Aランク）の特徴:
-- 具体的な時期が明示されている（来年度、令和X年度、〇月から等）
-- 予算化・予算要求の言及がある
-- 具体的なシステム・サービス導入の意向がある
-- 課題認識が明確で、解決への意欲が見られる
-- DX、デジタル化、効率化への積極的な姿勢
+### 高優先度（S/Aランク）の条件:
+1. 【必須】対象サービスとの関連性が高い
+2. 具体的な時期が明示されている（来年度、令和X年度、〇月から等）
+3. 予算化・予算要求の言及がある
+4. 具体的なシステム・サービス導入の意向がある
+5. 課題認識が明確で、解決への意欲が見られる
 
 ### 中優先度（Bランク）の特徴:
+- サービスと部分的に関連するが、直接的ではない
 - 課題認識はあるが、具体的な時期や予算が不明確
 - 「検討していく」「研究する」などの表現
-- 一般的な問題提起にとどまる
 
 ### 低優先度（Cランク）の特徴:
+- 対象サービスとの関連性が低い・ない
 - 「慎重に」「困難である」「時期尚早」などの消極的表現
 - 既に契約済み・導入済みの言及
 - 具体性がなく、進展の見込みが薄い
@@ -83,7 +93,11 @@ async function rankWithAI(
 
   const userPrompt = `以下の議会議事録を分析し、営業リードとしての優先度を判定してください。
 
-${serviceInfo ? `【対象サービス】\n${serviceInfo}\n` : ""}
+${serviceInfo ? `【対象サービス】
+${serviceInfo}
+
+※ 上記サービスとの関連性を最優先で判断してください。関連性が低い場合はBランク以下としてください。
+` : ""}
 【議題タイトル】
 ${title}
 
@@ -256,15 +270,26 @@ export async function POST(request: NextRequest) {
 
     // 企業のサービス情報を取得
     let serviceInfo = "";
-    const { data: services } = await supabase
+    const { data: services, error: servicesError } = await supabase
       .from("services")
       .select("name, description, target_keywords")
       .eq("company_id", companyId);
 
+    console.log("Services fetch result:", { companyId, services, error: servicesError });
+
     if (services && services.length > 0) {
       serviceInfo = services
-        .map(s => `${s.name}: ${s.description || ""} (キーワード: ${s.target_keywords || ""})`)
-        .join("\n");
+        .map(s => {
+          const parts = [];
+          if (s.name) parts.push(`【サービス名】${s.name}`);
+          if (s.description) parts.push(`【説明】${s.description}`);
+          if (s.target_keywords) parts.push(`【キーワード】${s.target_keywords}`);
+          return parts.join("\n");
+        })
+        .join("\n\n");
+      console.log("Service info for AI:", serviceInfo.substring(0, 500));
+    } else {
+      console.log("No services found for company:", companyId);
     }
 
     // 企業のトピックを取得（制限付き）
