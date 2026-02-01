@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { companyId, updateDb = true } = body;
+    const { companyId, updateDb = true, forceUpdate = false } = body;
 
     if (!companyId) {
       return NextResponse.json(
@@ -229,10 +229,17 @@ export async function POST(request: NextRequest) {
     const supabase = createServerSupabaseClient();
 
     // 企業のトピックを取得
-    const { data: topics, error } = await supabase
+    // forceUpdate=false の場合、priority が未設定のもののみ処理
+    let query = supabase
       .from("topics")
       .select("id, title, summary, excerpt_text, priority")
       .eq("company_id", companyId);
+
+    if (!forceUpdate) {
+      query = query.is("priority", null);
+    }
+
+    const { data: topics, error } = await query;
 
     if (error) {
       throw error;
@@ -241,8 +248,10 @@ export async function POST(request: NextRequest) {
     if (!topics || topics.length === 0) {
       return NextResponse.json({
         success: true,
-        message: "No topics found",
+        message: forceUpdate ? "対象のトピックがありません" : "未ランク付けのトピックがありません（既に全て処理済み）",
+        summary: { S: 0, A: 0, B: 0, C: 0 },
         results: [],
+        skippedExisting: !forceUpdate,
       });
     }
 
@@ -284,9 +293,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${topics.length}件のトピックをランク付けしました`,
+      message: `${topics.length}件のトピックをランク付けしました${!forceUpdate ? "（既存はスキップ）" : ""}`,
       summary: rankCounts,
       results,
+      forceUpdate,
     });
   } catch (error) {
     console.error("Rank error:", error);

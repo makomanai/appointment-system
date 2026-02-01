@@ -112,6 +112,7 @@ export async function runPipeline(
       row: z.row,
       zeroOrderScore: z.score,
       evidenceSnippets: [],
+      fullRangeText: "",
       hasSubtitle: false,
     }));
   }

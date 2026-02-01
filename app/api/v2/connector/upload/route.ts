@@ -14,6 +14,7 @@ import {
   ServiceInfo,
 } from "../../../../lib/connector/keyword-generator";
 import { kv } from "@vercel/kv";
+import { notifyPipelineComplete, isSlackConfigured } from "../../../../lib/slack";
 
 /**
  * CSVテキストをJsNextExportRow配列に変換
@@ -188,6 +189,19 @@ export async function POST(request: NextRequest) {
       firstOrderLimit: skipFirstOrder ? 0 : 100, // 1次判定の上限
       dryRun,
     });
+
+    // Slack通知（設定されている場合のみ、ドライラン以外）
+    if (isSlackConfigured() && !dryRun && result.importedCount > 0) {
+      await notifyPipelineComplete({
+        companyName: companyId,
+        serviceName: keywordConfig.serviceName,
+        totalFetched: result.totalFetched,
+        zeroOrderPassed: result.zeroOrderPassed,
+        importedCount: result.importedCount,
+        dryRun,
+        errors: result.errors,
+      });
+    }
 
     return NextResponse.json({
       success: true,

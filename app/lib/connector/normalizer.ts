@@ -8,9 +8,17 @@ import { FirstOrderResult, NormalizedTopicRow } from "./types";
 import { formatTime } from "./first-order-filter";
 
 /**
- * 根拠スニペットをexcerpt_textに連結
+ * 抽出テキストを生成
+ * fullRangeText（start_sec〜end_secの字幕全体）を使用
+ * fallbackとしてevidenceSnippetsを使用
  */
 function formatExcerptText(result: FirstOrderResult): string {
+  // fullRangeTextがあればそれを使用（start_sec〜end_secの字幕テキスト）
+  if (result.fullRangeText && result.fullRangeText.trim()) {
+    return result.fullRangeText;
+  }
+
+  // fallback: evidenceSnippetsから生成
   if (result.evidenceSnippets.length === 0) {
     return "";
   }
@@ -31,9 +39,23 @@ function formatExcerptText(result: FirstOrderResult): string {
 }
 
 /**
- * 根拠スニペットの時間範囲を excerpt_range に変換
+ * 抽出範囲を生成
+ * rowのstart_sec〜end_secを使用
  */
 function formatExcerptRange(result: FirstOrderResult): string {
+  const { row } = result;
+
+  // start_sec/end_secが有効な場合はその範囲を表示
+  if (row.start_sec > 0 || row.end_sec > 0) {
+    const startStr = formatTime(row.start_sec);
+    const endStr = formatTime(row.end_sec);
+    const snippetInfo = result.evidenceSnippets.length > 0
+      ? ` (${result.evidenceSnippets.length}件のKWマッチ)`
+      : "";
+    return `${startStr} - ${endStr}${snippetInfo}`;
+  }
+
+  // fallback: evidenceSnippetsから範囲を計算
   if (result.evidenceSnippets.length === 0) {
     return "";
   }
@@ -227,7 +249,7 @@ export function toImportPayload(
   category?: string | null;
   stance?: string | null;
   status: string;
-  priority: string;
+  priority: string | null;
   dispatch_status: string;
 }> {
   // 重複排除: company_row_keyでグループ化し、最初のものを採用
@@ -265,7 +287,7 @@ export function toImportPayload(
       category: row.category || null,
       stance: row.stance || null,
       status: "未着手",
-      priority: "B", // 初期はBランク、AI判定後に更新
+      priority: null, // AI判定で設定される（初期はnull）
       dispatch_status: "NOT_SENT",
     };
   });

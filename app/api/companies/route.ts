@@ -13,7 +13,8 @@ export async function GET() {
 
       const { data, error } = await supabase
         .from("companies")
-        .select("company_id, company_name, company_file_id")
+        .select("company_id, company_name, company_file_id, is_hidden")
+        .eq("is_hidden", false)
         .order("company_name", { ascending: true });
 
       if (error) {

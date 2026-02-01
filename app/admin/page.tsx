@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 interface Company {
   companyId: string;
   companyName: string;
+  isHidden?: boolean;
 }
 
 export default function AdminPage() {
@@ -101,6 +102,10 @@ export default function AdminPage() {
   const [newCompanyName, setNewCompanyName] = useState("");
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
 
+  // 非表示企業管理用
+  const [hiddenCompanies, setHiddenCompanies] = useState<Company[]>([]);
+  const [showHiddenCompanies, setShowHiddenCompanies] = useState(false);
+
   // コネクタ（データ自動取込）用
   interface ServiceOption {
     id: string;
@@ -131,6 +136,23 @@ export default function AdminPage() {
     errors?: string[];
   } | null>(null);
 
+  // ダッシュボード統計用
+  const [stats, setStats] = useState<{
+    totalTopics: number;
+    byStatus: Record<string, number>;
+    byPriority: Record<string, number>;
+    recentImports: { today: number; thisWeek: number; thisMonth: number };
+  } | null>(null);
+
+  // ワンクリック一括処理用
+  const [batchCompanyId, setBatchCompanyId] = useState("");
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{
+    step: string;
+    completed: string[];
+    errors: string[];
+  } | null>(null);
+
   // 認証チェック
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -138,22 +160,59 @@ export default function AdminPage() {
     }
   }, [status, router]);
 
-  // 企業一覧を取得
-  useEffect(() => {
-    const fetchCompanies = async () => {
-      try {
-        const response = await fetch("/api/companies");
-        const result = await response.json();
-        if (result.success) {
-          setCompanies(result.data || []);
-        }
-      } catch (error) {
-        console.error("Failed to fetch companies:", error);
+  // 企業一覧を取得（表示中・非表示の両方）
+  const fetchAllCompanies = async () => {
+    try {
+      // 表示中の企業を取得
+      const response = await fetch("/api/companies");
+      const result = await response.json();
+      if (result.success) {
+        setCompanies(result.data || []);
       }
-    };
 
-    fetchCompanies();
+      // 非表示の企業を取得
+      const hiddenResponse = await fetch("/api/v2/companies?includeHidden=true");
+      const hiddenResult = await hiddenResponse.json();
+      if (hiddenResult.success) {
+        const allCompanies = hiddenResult.data || [];
+        const hidden = allCompanies
+          .filter((c: { is_hidden: boolean }) => c.is_hidden)
+          .map((c: { company_id: string; company_name: string }) => ({
+            companyId: c.company_id,
+            companyName: c.company_name,
+            isHidden: true,
+          }));
+        setHiddenCompanies(hidden);
+      }
+    } catch (error) {
+      console.error("Failed to fetch companies:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchAllCompanies();
   }, []);
+
+  // 企業の非表示/表示を切り替え
+  const toggleCompanyVisibility = async (companyId: string, hide: boolean) => {
+    try {
+      const response = await fetch("/api/v2/companies", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: companyId, is_hidden: hide }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setMessage({ type: "success", text: result.message });
+        // 企業一覧を再取得
+        await fetchAllCompanies();
+      } else {
+        setMessage({ type: "error", text: result.error || "操作に失敗しました" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "操作に失敗しました" });
+    }
+  };
 
   // サービス一覧を取得
   useEffect(() => {
@@ -174,6 +233,23 @@ export default function AdminPage() {
     };
 
     fetchServices();
+  }, []);
+
+  // ダッシュボード統計を取得
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await fetch("/api/v2/stats");
+        const result = await response.json();
+        if (result.success) {
+          setStats(result.stats);
+        }
+      } catch (error) {
+        console.error("Failed to fetch stats:", error);
+      }
+    };
+
+    fetchStats();
   }, []);
 
   // ヘッダー名のマッピング
@@ -536,6 +612,99 @@ export default function AdminPage() {
     }
   };
 
+  // ワンクリック一括処理
+  const handleBatchRun = async () => {
+    if (!batchCompanyId) {
+      setMessage({ type: "error", text: "企業を選択してください" });
+      return;
+    }
+
+    setIsBatchRunning(true);
+    setBatchProgress({ step: "開始", completed: [], errors: [] });
+    setMessage(null);
+
+    const completed: string[] = [];
+    const errors: string[] = [];
+
+    try {
+      // Step 1: SRT自動紐付け
+      setBatchProgress({ step: "SRT紐付け中...", completed, errors });
+      try {
+        const srtRes = await fetch("/api/v2/srt/auto-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: batchCompanyId }),
+        });
+        const srtResult = await srtRes.json();
+        if (srtResult.success) {
+          completed.push(`SRT紐付け: ${srtResult.updated}件更新`);
+        } else {
+          errors.push(`SRT紐付け: ${srtResult.error}`);
+        }
+      } catch (e) {
+        errors.push(`SRT紐付け: ${e instanceof Error ? e.message : "不明なエラー"}`);
+      }
+
+      // Step 2: AI要約生成
+      setBatchProgress({ step: "AI要約生成中...", completed: [...completed], errors: [...errors] });
+      try {
+        const sumRes = await fetch("/api/v2/topics/summarize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: batchCompanyId, forceUpdate: false }),
+        });
+        const sumResult = await sumRes.json();
+        if (sumResult.success) {
+          completed.push(`AI要約: ${sumResult.updated}件生成`);
+        } else {
+          errors.push(`AI要約: ${sumResult.error}`);
+        }
+      } catch (e) {
+        errors.push(`AI要約: ${e instanceof Error ? e.message : "不明なエラー"}`);
+      }
+
+      // Step 3: AIランク付け
+      setBatchProgress({ step: "AIランク付け中...", completed: [...completed], errors: [...errors] });
+      try {
+        const rankRes = await fetch("/api/v2/topics/rank", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: batchCompanyId, updateDb: true }),
+        });
+        const rankResult = await rankRes.json();
+        if (rankResult.success) {
+          const s = rankResult.summary;
+          completed.push(`ランク付け: S${s.S} A${s.A} B${s.B} C${s.C}`);
+        } else {
+          errors.push(`ランク付け: ${rankResult.error}`);
+        }
+      } catch (e) {
+        errors.push(`ランク付け: ${e instanceof Error ? e.message : "不明なエラー"}`);
+      }
+
+      // 完了
+      setBatchProgress({ step: "完了", completed, errors });
+      setMessage({
+        type: errors.length > 0 ? "error" : "success",
+        text: `一括処理完了: ${completed.length}件成功、${errors.length}件エラー`,
+      });
+
+      // 統計を再取得
+      const statsRes = await fetch("/api/v2/stats");
+      const statsResult = await statsRes.json();
+      if (statsResult.success) {
+        setStats(statsResult.stats);
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "一括処理に失敗しました",
+      });
+    } finally {
+      setIsBatchRunning(false);
+    }
+  };
+
   // コネクタ実行処理
   const handleConnectorRun = async () => {
     if (!connectorCompanyId) {
@@ -707,6 +876,170 @@ export default function AdminPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {/* ダッシュボード統計セクション */}
+        {stats && (
+          <section className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 mb-8 text-white">
+            <h2 className="text-lg font-bold mb-4">ダッシュボード</h2>
+
+            {/* メイン統計 */}
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="bg-white/10 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold">{stats.totalTopics}</div>
+                <div className="text-sm opacity-80">総トピック数</div>
+              </div>
+              <div className="bg-white/10 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold">{stats.byStatus["未着手"] || 0}</div>
+                <div className="text-sm opacity-80">未着手</div>
+              </div>
+              <div className="bg-white/10 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold">{stats.byStatus["架電中"] || 0}</div>
+                <div className="text-sm opacity-80">架電中</div>
+              </div>
+              <div className="bg-white/10 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold">{stats.byStatus["完了"] || 0}</div>
+                <div className="text-sm opacity-80">完了</div>
+              </div>
+            </div>
+
+            {/* 優先度別・最近のインポート */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* 優先度別 */}
+              <div className="bg-white/10 rounded-lg p-4">
+                <h3 className="text-sm font-medium mb-2 opacity-80">優先度別</h3>
+                <div className="flex gap-3">
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-full bg-red-400"></span>
+                    S: {stats.byPriority["S"] || 0}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-full bg-orange-400"></span>
+                    A: {stats.byPriority["A"] || 0}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-full bg-yellow-400"></span>
+                    B: {stats.byPriority["B"] || 0}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-3 h-3 rounded-full bg-gray-400"></span>
+                    C: {stats.byPriority["C"] || 0}
+                  </span>
+                </div>
+              </div>
+
+              {/* 最近のインポート */}
+              <div className="bg-white/10 rounded-lg p-4">
+                <h3 className="text-sm font-medium mb-2 opacity-80">最近のインポート</h3>
+                <div className="flex gap-4">
+                  <span>今日: {stats.recentImports.today}</span>
+                  <span>今週: {stats.recentImports.thisWeek}</span>
+                  <span>今月: {stats.recentImports.thisMonth}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ワンクリック一括処理セクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-green-300">
+          <h2 className="text-lg font-bold text-green-800 mb-4">
+            ワンクリック一括処理
+            <span className="ml-2 text-xs font-normal text-green-600 bg-green-100 px-2 py-1 rounded">
+              時短機能
+            </span>
+          </h2>
+
+          <p className="text-sm text-gray-600 mb-4">
+            選択した企業のトピックに対して、SRT紐付け → AI要約生成 → ランク付けを一括実行します。
+          </p>
+
+          <div className="space-y-4">
+            {/* 企業選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業を選択 *
+              </label>
+              <select
+                value={batchCompanyId}
+                onChange={(e) => setBatchCompanyId(e.target.value)}
+                className="w-full border border-green-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">-- 企業を選択 --</option>
+                {companies.map((company) => (
+                  <option key={company.companyId} value={company.companyId}>
+                    {company.companyId} - {company.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 実行ボタン */}
+            <button
+              onClick={handleBatchRun}
+              disabled={isBatchRunning || !batchCompanyId}
+              className={`w-full py-3 rounded-lg font-medium text-white ${
+                isBatchRunning || !batchCompanyId
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700"
+              }`}
+            >
+              {isBatchRunning ? "処理中..." : "一括処理を実行"}
+            </button>
+
+            {/* 進捗表示 */}
+            {batchProgress && (
+              <div className="p-4 bg-green-50 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  {isBatchRunning && (
+                    <div className="animate-spin h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full"></div>
+                  )}
+                  <span className="font-medium text-green-800">{batchProgress.step}</span>
+                </div>
+
+                {batchProgress.completed.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium text-green-700 mb-1">完了:</p>
+                    <ul className="text-xs text-green-600 space-y-1">
+                      {batchProgress.completed.map((item, i) => (
+                        <li key={i} className="flex items-center gap-1">
+                          <span className="text-green-500">✓</span> {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {batchProgress.errors.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-red-700 mb-1">エラー:</p>
+                    <ul className="text-xs text-red-600 space-y-1">
+                      {batchProgress.errors.map((item, i) => (
+                        <li key={i} className="flex items-center gap-1">
+                          <span className="text-red-500">✗</span> {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 説明 */}
+          <div className="mt-6 p-4 bg-green-50 rounded-lg">
+            <h3 className="text-sm font-medium text-green-800 mb-2">
+              一括処理の内容
+            </h3>
+            <ol className="text-xs text-green-700 space-y-1 list-decimal list-inside">
+              <li><strong>SRT紐付け:</strong> Google Driveから字幕を取得してトピックに紐付け</li>
+              <li><strong>AI要約生成:</strong> 抽出テキストからGPTで要約を自動生成</li>
+              <li><strong>AIランク付け:</strong> ゴールデンルールでS/A/B/Cを自動判定</li>
+            </ol>
+            <p className="text-xs text-green-600 mt-2">
+              ※ 各処理は既に完了済みの項目はスキップされます
+            </p>
+          </div>
+        </section>
+
         {/* 企業新規登録セクション */}
         <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-lg font-bold text-gray-800 mb-4">
@@ -751,13 +1084,56 @@ export default function AdminPage() {
                 {companies.map((company) => (
                   <span
                     key={company.companyId}
-                    className="inline-block bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-600"
+                    className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-600"
                   >
                     {company.companyId}: {company.companyName}
+                    <button
+                      onClick={() => toggleCompanyVisibility(company.companyId, true)}
+                      className="ml-1 text-gray-400 hover:text-red-500"
+                      title="非表示にする"
+                    >
+                      ×
+                    </button>
                   </span>
                 ))}
               </div>
             </div>
+
+            {/* 非表示企業一覧 */}
+            {hiddenCompanies.length > 0 && (
+              <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-red-700">
+                    非表示企業 ({hiddenCompanies.length}件)
+                  </h3>
+                  <button
+                    onClick={() => setShowHiddenCompanies(!showHiddenCompanies)}
+                    className="text-xs text-red-600 hover:text-red-800"
+                  >
+                    {showHiddenCompanies ? "隠す" : "表示"}
+                  </button>
+                </div>
+                {showHiddenCompanies && (
+                  <div className="flex flex-wrap gap-2">
+                    {hiddenCompanies.map((company) => (
+                      <span
+                        key={company.companyId}
+                        className="inline-flex items-center gap-1 bg-white border border-red-200 rounded px-2 py-1 text-xs text-red-600"
+                      >
+                        {company.companyId}: {company.companyName}
+                        <button
+                          onClick={() => toggleCompanyVisibility(company.companyId, false)}
+                          className="ml-1 text-red-400 hover:text-green-600"
+                          title="表示に戻す"
+                        >
+                          ↺
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -1727,6 +2103,18 @@ export default function AdminPage() {
             実装済み機能
           </h2>
           <ul className="space-y-2 text-gray-600">
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span>
+              ダッシュボード統計（ステータス・優先度・最近のインポート）
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span>
+              ワンクリック一括処理（SRT→要約→ランク付け）
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span>
+              Slack通知（パイプライン完了時・スケジューラー完了時）
+            </li>
             <li className="flex items-center gap-2">
               <span className="text-green-500">✓</span>
               トピックCSVアップロード

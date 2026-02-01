@@ -18,6 +18,7 @@ import {
 import { runPipeline } from "../../../../lib/connector/pipeline";
 import { buildServiceKeywordConfig, getDefaultServiceKeywordConfig } from "../../../../lib/connector/zero-order-filter";
 import { PipelineResult, ServiceKeywordConfig } from "../../../../lib/connector/types";
+import { notifySchedulerComplete, isSlackConfigured } from "../../../../lib/slack";
 
 /**
  * 日本時間の深夜帯（22:00〜7:00）かどうかをチェック
@@ -234,6 +235,21 @@ export async function POST(request: NextRequest) {
     };
 
     console.log("\n[Scheduler] 完了:", summary);
+
+    // Slack通知（設定されている場合のみ、ドライラン以外）
+    if (isSlackConfigured() && !dryRun) {
+      const errorDetails = results
+        .filter((r) => !r.success)
+        .map((r) => ({ companyId: r.companyId, error: r.error || "Unknown" }));
+
+      await notifySchedulerComplete({
+        totalCompanies: summary.totalCompanies,
+        successCount: summary.successCount,
+        errorCount: summary.errorCount,
+        totalImported: summary.totalImported,
+        errors: errorDetails,
+      });
+    }
 
     return NextResponse.json({
       success: true,

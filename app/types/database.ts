@@ -26,6 +26,7 @@ export interface Company {
   company_name: string;
   company_file_id: string | null;
   script_base: string | null;
+  is_hidden: boolean;
   created_at: string;
   updated_at: string;
 }

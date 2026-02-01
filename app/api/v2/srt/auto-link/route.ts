@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { companyId } = body;
+    const { companyId, forceUpdate = false } = body;
 
     if (!companyId) {
       return NextResponse.json(
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerSupabaseClient();
 
-    // excerpt_textが空で、group_idがあるトピックを取得
+    // group_idがあるトピックを取得
     const { data: topics, error: fetchError } = await supabase
       .from("topics")
       .select("id, title, group_id, start_sec, end_sec, excerpt_text")
@@ -112,10 +112,12 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // excerpt_textが空のトピックだけをフィルタ
-    const topicsToProcess = topics.filter(t => !t.excerpt_text);
+    // forceUpdate=false の場合はexcerpt_textが空のトピックだけをフィルタ
+    const topicsToProcess = forceUpdate
+      ? topics
+      : topics.filter(t => !t.excerpt_text);
 
-    console.log(`Processing ${topicsToProcess.length} topics for company ${companyId}`);
+    console.log(`Processing ${topicsToProcess.length} topics for company ${companyId} (forceUpdate: ${forceUpdate})`);
 
     // グループIDごとにSRTをキャッシュ
     const srtCache: Record<string, SRTEntry[] | null> = {};
@@ -228,11 +230,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${updated}件のトピックにSRTを紐付けました`,
+      message: `${updated}件のトピックにSRTを紐付けました${forceUpdate ? "（強制更新）" : ""}`,
       processed: topicsToProcess.length,
       updated,
       skipped,
       failed,
+      forceUpdate,
       results,
     });
   } catch (error) {

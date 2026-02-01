@@ -84,6 +84,29 @@ function extractSegmentsInRange(
 }
 
 /**
+ * 正確なstart_sec〜end_secの範囲のセグメントを抽出（paddingなし）
+ */
+function extractExactRangeSegments(
+  segments: SrtSegment[],
+  startSec: number,
+  endSec: number
+): SrtSegment[] {
+  return segments.filter(
+    (seg) => seg.endSec >= startSec && seg.startSec <= endSec
+  );
+}
+
+/**
+ * セグメント配列をテキストに連結
+ */
+function segmentsToText(segments: SrtSegment[]): string {
+  return segments
+    .sort((a, b) => a.startSec - b.startSec)
+    .map((seg) => seg.text)
+    .join(" ");
+}
+
+/**
  * セグメントからキーワードマッチするスニペットを抽出
  */
 function extractSnippetsWithKeywords(
@@ -136,6 +159,7 @@ export async function runFirstOrderForSingle(
       row,
       zeroOrderScore: zeroResult.score,
       evidenceSnippets: [],
+      fullRangeText: "",
       hasSubtitle: false,
     };
   }
@@ -149,6 +173,7 @@ export async function runFirstOrderForSingle(
         row,
         zeroOrderScore: zeroResult.score,
         evidenceSnippets: [],
+        fullRangeText: "",
         hasSubtitle: false,
       };
     }
@@ -156,7 +181,15 @@ export async function runFirstOrderForSingle(
     // SRTをパース
     const segments = parseSrt(srtContent);
 
-    // start/end ±30秒の範囲を抽出
+    // start_sec〜end_sec の正確な範囲のテキストを抽出
+    const exactRangeSegments = extractExactRangeSegments(
+      segments,
+      row.start_sec,
+      row.end_sec
+    );
+    const fullRangeText = segmentsToText(exactRangeSegments);
+
+    // start/end ±30秒の範囲を抽出（キーワードマッチ用）
     const relevantSegments = extractSegmentsInRange(
       segments,
       row.start_sec,
@@ -176,6 +209,7 @@ export async function runFirstOrderForSingle(
       row,
       zeroOrderScore: zeroResult.score,
       evidenceSnippets: snippets,
+      fullRangeText,
       hasSubtitle: true,
     };
   } catch (error) {
@@ -187,6 +221,7 @@ export async function runFirstOrderForSingle(
       row,
       zeroOrderScore: zeroResult.score,
       evidenceSnippets: [],
+      fullRangeText: "",
       hasSubtitle: false,
     };
   }
@@ -210,6 +245,7 @@ export async function runFirstOrderFilter(
       row: z.row,
       zeroOrderScore: z.score,
       evidenceSnippets: [],
+      fullRangeText: "",
       hasSubtitle: false,
     }));
   }

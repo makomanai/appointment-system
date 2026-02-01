@@ -63,9 +63,9 @@ export interface EvidenceSnippet {
 export interface FirstOrderResult {
   row: JsNextExportRow;
   zeroOrderScore: number;
-  evidenceSnippets: EvidenceSnippet[];  // 最大10件
+  evidenceSnippets: EvidenceSnippet[];  // キーワードマッチしたスニペット（最大10件）
+  fullRangeText: string;                // start_sec〜end_secの字幕テキスト全体
   hasSubtitle: boolean;
-  // 字幕全文は含まない（次工程に渡さない）
 }
 
 // 既存importに渡す正規化済みデータ
