@@ -83,6 +83,36 @@ export default function AdminPage() {
   const [newCompanyName, setNewCompanyName] = useState("");
   const [isCreatingCompany, setIsCreatingCompany] = useState(false);
 
+  // コネクタ（データ自動取込）用
+  interface ServiceOption {
+    id: string;
+    name: string;
+    description: string;
+  }
+  const [services, setServices] = useState<ServiceOption[]>([]);
+  const [connectorCompanyId, setConnectorCompanyId] = useState("");
+  const [connectorServiceId, setConnectorServiceId] = useState("");
+  const [connectorDryRun, setConnectorDryRun] = useState(true);
+  const [isConnectorRunning, setIsConnectorRunning] = useState(false);
+  const [connectorResult, setConnectorResult] = useState<{
+    totalFetched: number;
+    zeroOrderPassed: number;
+    firstOrderProcessed: number;
+    importedCount: number;
+    fetchInfo?: {
+      isInitial: boolean;
+      dateRange: { start: string; end: string };
+      previousFetch: string | null;
+    };
+    keywordConfig?: {
+      serviceName: string;
+      mustCount: number;
+      shouldCount: number;
+      mustKeywords: string[];
+    };
+    errors?: string[];
+  } | null>(null);
+
   // 認証チェック
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -105,6 +135,27 @@ export default function AdminPage() {
     };
 
     fetchCompanies();
+  }, []);
+
+  // サービス一覧を取得
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const response = await fetch("/api/services");
+        const result = await response.json();
+        if (result.success && result.data) {
+          setServices(result.data.map((s: { id: string; name: string; description: string }) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description || "",
+          })));
+        }
+      } catch (error) {
+        console.error("Failed to fetch services:", error);
+      }
+    };
+
+    fetchServices();
   }, []);
 
   // ヘッダー名のマッピング
@@ -467,6 +518,63 @@ export default function AdminPage() {
     }
   };
 
+  // コネクタ実行処理
+  const handleConnectorRun = async () => {
+    if (!connectorCompanyId) {
+      setMessage({ type: "error", text: "企業を選択してください" });
+      return;
+    }
+
+    setIsConnectorRunning(true);
+    setConnectorResult(null);
+    setMessage(null);
+
+    try {
+      const response = await fetch("/api/v2/connector/fetch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          companyId: connectorCompanyId,
+          serviceId: connectorServiceId || undefined,
+          dryRun: connectorDryRun,
+          limit: 0, // B評価以上は全件通過
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setConnectorResult({
+          totalFetched: result.totalFetched,
+          zeroOrderPassed: result.zeroOrderPassed,
+          firstOrderProcessed: result.firstOrderProcessed,
+          importedCount: result.importedCount,
+          fetchInfo: result.fetchInfo,
+          keywordConfig: result.keywordConfig,
+          errors: result.errors,
+        });
+        setMessage({
+          type: "success",
+          text: result.message || `取込完了: ${result.importedCount}件`,
+        });
+      } else {
+        setMessage({
+          type: "error",
+          text: result.error || "データ取込に失敗しました",
+        });
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "データ取込に失敗しました",
+      });
+    } finally {
+      setIsConnectorRunning(false);
+    }
+  };
+
   // アップロード処理
   const handleUpload = async () => {
     if (!file || !selectedCompanyId) {
@@ -730,6 +838,216 @@ export default function AdminPage() {
             <code className="text-xs bg-gray-200 px-2 py-1 rounded block overflow-x-auto">
               都道府県, 市町村, 議会日付, 議題タイトル, 議題概要, 質問者, 回答者, ソースURL, group_id
             </code>
+          </div>
+        </section>
+
+        {/* コネクタ（データ自動取込）セクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-teal-300">
+          <h2 className="text-lg font-bold text-teal-800 mb-4">
+            データ自動取込（Aコネクタ）
+            <span className="ml-2 text-xs font-normal text-teal-600 bg-teal-100 px-2 py-1 rounded">
+              JS-NEXT連携
+            </span>
+          </h2>
+
+          <div className="space-y-4">
+            {/* 企業選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業を選択 *
+              </label>
+              <select
+                value={connectorCompanyId}
+                onChange={(e) => setConnectorCompanyId(e.target.value)}
+                className="w-full border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">-- 企業を選択 --</option>
+                {companies.map((company) => (
+                  <option key={company.companyId} value={company.companyId}>
+                    {company.companyId} - {company.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* サービス選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                サービスを選択（AIキーワード生成に使用）
+              </label>
+              <select
+                value={connectorServiceId}
+                onChange={(e) => setConnectorServiceId(e.target.value)}
+                className="w-full border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">-- 汎用検索（サービス未指定）--</option>
+                {services.map((service) => (
+                  <option key={service.id} value={service.id}>
+                    {service.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                サービスを選択すると、AIがサービスに適したキーワードを自動生成します
+              </p>
+            </div>
+
+            {/* ドライラン切り替え */}
+            <div className="flex items-center gap-3">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={connectorDryRun}
+                  onChange={(e) => setConnectorDryRun(e.target.checked)}
+                  className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">
+                  ドライラン（DB投入せず結果のみ確認）
+                </span>
+              </label>
+            </div>
+
+            {/* 実行ボタン */}
+            <button
+              onClick={handleConnectorRun}
+              disabled={isConnectorRunning || !connectorCompanyId}
+              className={`w-full py-3 rounded-lg font-medium text-white ${
+                isConnectorRunning || !connectorCompanyId
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : connectorDryRun
+                  ? "bg-teal-500 hover:bg-teal-600"
+                  : "bg-teal-700 hover:bg-teal-800"
+              }`}
+            >
+              {isConnectorRunning
+                ? "取込中..."
+                : connectorDryRun
+                ? "ドライラン実行（確認のみ）"
+                : "本番実行（DBに投入）"}
+            </button>
+
+            {/* 結果表示 */}
+            {connectorResult && (
+              <div className="space-y-3">
+                {/* パイプライン結果 */}
+                <div className="p-4 bg-teal-50 rounded-lg">
+                  <h3 className="font-medium text-teal-800 mb-2">
+                    パイプライン結果
+                    {connectorDryRun && (
+                      <span className="ml-2 text-xs text-teal-600">(ドライラン)</span>
+                    )}
+                  </h3>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-blue-600">
+                        {connectorResult.totalFetched}
+                      </div>
+                      <div className="text-xs text-blue-600">取得</div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-green-600">
+                        {connectorResult.zeroOrderPassed}
+                      </div>
+                      <div className="text-xs text-green-600">0次通過</div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-purple-600">
+                        {connectorResult.firstOrderProcessed}
+                      </div>
+                      <div className="text-xs text-purple-600">1次処理</div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-teal-600">
+                        {connectorResult.importedCount}
+                      </div>
+                      <div className="text-xs text-teal-600">DB投入</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 取得情報 */}
+                {connectorResult.fetchInfo && (
+                  <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                    <div className="flex flex-wrap gap-3">
+                      <span>
+                        <strong>取得方式:</strong>{" "}
+                        {connectorResult.fetchInfo.isInitial ? "初回（4ヶ月分）" : "差分"}
+                      </span>
+                      <span>
+                        <strong>期間:</strong>{" "}
+                        {connectorResult.fetchInfo.dateRange.start} 〜{" "}
+                        {connectorResult.fetchInfo.dateRange.end}
+                      </span>
+                      {connectorResult.fetchInfo.previousFetch && (
+                        <span>
+                          <strong>前回取得:</strong>{" "}
+                          {connectorResult.fetchInfo.previousFetch}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* キーワード情報 */}
+                {connectorResult.keywordConfig && (
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="text-xs text-blue-700">
+                      <strong>サービス:</strong> {connectorResult.keywordConfig.serviceName}
+                      <span className="mx-2">|</span>
+                      <strong>必須KW:</strong> {connectorResult.keywordConfig.mustCount}件
+                      <span className="mx-2">|</span>
+                      <strong>推奨KW:</strong> {connectorResult.keywordConfig.shouldCount}件
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {connectorResult.keywordConfig.mustKeywords.slice(0, 5).map((kw, i) => (
+                        <span
+                          key={i}
+                          className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded"
+                        >
+                          {kw}
+                        </span>
+                      ))}
+                      {connectorResult.keywordConfig.mustKeywords.length > 5 && (
+                        <span className="text-xs text-blue-500">
+                          +{connectorResult.keywordConfig.mustKeywords.length - 5}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* エラー表示 */}
+                {connectorResult.errors && connectorResult.errors.length > 0 && (
+                  <div className="p-3 bg-red-50 rounded-lg">
+                    <div className="text-xs text-red-700">
+                      <strong>エラー:</strong>
+                      <ul className="mt-1 list-disc list-inside">
+                        {connectorResult.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 説明 */}
+          <div className="mt-6 p-4 bg-teal-50 rounded-lg">
+            <h3 className="text-sm font-medium text-teal-800 mb-2">
+              データ取込パイプライン
+            </h3>
+            <ol className="text-xs text-teal-700 space-y-1 list-decimal list-inside">
+              <li><strong>AIキーワード生成:</strong> サービス情報からGPTが検索キーワードを自動生成</li>
+              <li><strong>JS-NEXTフェッチ:</strong> 議会映像データベースから関連データを取得</li>
+              <li><strong>0次判定:</strong> キーワードスコアリングでB評価以上をフィルタ</li>
+              <li><strong>1次判定:</strong> 字幕から根拠スニペットを抽出（上位100件）</li>
+              <li><strong>DB投入:</strong> 重複排除してトピックテーブルに保存</li>
+            </ol>
+            <p className="text-xs text-teal-600 mt-2">
+              ※ 初回は直近4ヶ月分、2回目以降は差分のみ取得します
+            </p>
           </div>
         </section>
 
@@ -1203,6 +1521,18 @@ export default function AdminPage() {
             <li className="flex items-center gap-2">
               <span className="text-green-500">✓</span>
               トピックCSVアップロード
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span>
+              データ自動取込（Aコネクタ・JS-NEXT連携）
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span>
+              AIキーワード自動生成（サービス情報からGPTで生成）
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-green-500">✓</span>
+              0次・1次判定パイプライン
             </li>
             <li className="flex items-center gap-2">
               <span className="text-green-500">✓</span>
