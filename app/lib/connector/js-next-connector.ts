@@ -3,12 +3,51 @@
  *
  * Playwrightを使用してJS-NEXTにログインし、
  * サービス別の検索条件で「答弁エクスポート」を実行してCSVをダウンロード
+ *
+ * 注意: Playwrightはサーバーレス環境（Vercel）では動作しません。
+ * ローカル環境またはPlaywrightがインストールされた環境でのみ使用可能です。
  */
 
-import { chromium, Browser, Page, Download } from "playwright";
 import * as fs from "fs";
 import * as path from "path";
 import { ConnectorConfig, JsNextExportRow, ServiceKeywordConfig } from "./types";
+
+// Playwright の型定義（動的インポート用）
+type Browser = import("playwright").Browser;
+type Page = import("playwright").Page;
+type Download = import("playwright").Download;
+
+// Playwright を動的にインポート（サーバーレス環境対応）
+let playwrightModule: typeof import("playwright") | null = null;
+
+async function getPlaywright(): Promise<typeof import("playwright")> {
+  if (playwrightModule) {
+    return playwrightModule;
+  }
+
+  try {
+    playwrightModule = await import("playwright");
+    return playwrightModule;
+  } catch {
+    throw new Error(
+      "Playwrightがインストールされていません。" +
+      "この機能はローカル環境でのみ使用可能です。" +
+      "ローカルで実行するには: npm install playwright && npx playwright install chromium"
+    );
+  }
+}
+
+/**
+ * Playwright が利用可能かチェック
+ */
+export function isPlaywrightAvailable(): boolean {
+  try {
+    require.resolve("playwright");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // JS-NEXTのURL定数
 const JS_NEXT_BASE_URL = "https://js-next.com";
@@ -91,11 +130,12 @@ export class JsNextConnector {
   async login(): Promise<void> {
     console.log("[Aコネクタ] ブラウザを起動...");
 
-    this.browser = await chromium.launch({
+    const playwright = await getPlaywright();
+    this.browser = await playwright.chromium.launch({
       headless: true, // 本番ではtrue、デバッグ時はfalse
     });
 
-    const context = await this.browser.newContext({
+    const context = await this.browser!.newContext({
       acceptDownloads: true,
     });
 
