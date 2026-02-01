@@ -19,6 +19,24 @@ export default function AdminPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // CSVアップロード + 判定パイプライン用
+  const [usePipeline, setUsePipeline] = useState(true); // デフォルトでパイプライン使用
+  const [uploadServiceId, setUploadServiceId] = useState("");
+  const [uploadDryRun, setUploadDryRun] = useState(true);
+  const [uploadResult, setUploadResult] = useState<{
+    totalFetched: number;
+    zeroOrderPassed: number;
+    firstOrderProcessed: number;
+    importedCount: number;
+    keywordConfig?: {
+      serviceName: string;
+      mustCount: number;
+      shouldCount: number;
+      mustKeywords: string[];
+    };
+    errors?: string[];
+  } | null>(null);
+
   // CSVプレビュー用
   const [csvPreview, setCsvPreview] = useState<{
     headers: string[];
@@ -584,12 +602,56 @@ export default function AdminPage() {
 
     setIsUploading(true);
     setMessage(null);
+    setUploadResult(null);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("companyId", selectedCompanyId);
 
+      // パイプライン使用時は判定付きアップロード
+      if (usePipeline) {
+        if (uploadServiceId) {
+          formData.append("serviceId", uploadServiceId);
+        }
+        formData.append("dryRun", uploadDryRun.toString());
+
+        const response = await fetch("/api/v2/connector/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          setUploadResult({
+            totalFetched: result.totalFetched,
+            zeroOrderPassed: result.zeroOrderPassed,
+            firstOrderProcessed: result.firstOrderProcessed,
+            importedCount: result.importedCount,
+            keywordConfig: result.keywordConfig,
+            errors: result.errors,
+          });
+          setMessage({
+            type: "success",
+            text: result.message || `処理完了`,
+          });
+          if (!uploadDryRun) {
+            setFile(null);
+            setCsvPreview(null);
+            const fileInput = document.getElementById("csv-file") as HTMLInputElement;
+            if (fileInput) fileInput.value = "";
+          }
+        } else {
+          setMessage({
+            type: "error",
+            text: result.error || "判定付きアップロードに失敗しました",
+          });
+        }
+        return;
+      }
+
+      // 従来の単純インポート
       const response = await fetch("/api/v2/topics/import", {
         method: "POST",
         body: formData,
@@ -744,6 +806,59 @@ export default function AdminPage() {
               )}
             </div>
 
+            {/* 判定パイプライン設定 */}
+            <div className="p-4 bg-teal-50 rounded-lg border border-teal-200">
+              <div className="flex items-center gap-3 mb-3">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={usePipeline}
+                    onChange={(e) => setUsePipeline(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                  />
+                  <span className="ml-2 text-sm font-medium text-teal-800">
+                    0次・1次判定を実行（推奨）
+                  </span>
+                </label>
+              </div>
+
+              {usePipeline && (
+                <div className="space-y-3 pl-6">
+                  {/* サービス選択 */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      サービス（AIキーワード生成用）
+                    </label>
+                    <select
+                      value={uploadServiceId}
+                      onChange={(e) => setUploadServiceId(e.target.value)}
+                      className="w-full border border-teal-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    >
+                      <option value="">-- 汎用検索（サービス未指定）--</option>
+                      {services.map((service) => (
+                        <option key={service.id} value={service.id}>
+                          {service.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* ドライラン */}
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={uploadDryRun}
+                      onChange={(e) => setUploadDryRun(e.target.checked)}
+                      className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
+                    />
+                    <span className="ml-2 text-xs text-gray-600">
+                      ドライラン（DB投入せず結果のみ確認）
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
             {/* CSVプレビュー */}
             {csvPreview && (
               <div className="border border-blue-200 rounded-lg overflow-hidden">
@@ -820,11 +935,105 @@ export default function AdminPage() {
               className={`w-full py-3 rounded-lg font-medium text-white ${
                 isUploading || !file || !selectedCompanyId
                   ? "bg-gray-400 cursor-not-allowed"
+                  : usePipeline
+                  ? uploadDryRun
+                    ? "bg-teal-500 hover:bg-teal-600"
+                    : "bg-teal-700 hover:bg-teal-800"
                   : "bg-blue-600 hover:bg-blue-700"
               }`}
             >
-              {isUploading ? "アップロード中..." : "アップロード"}
+              {isUploading
+                ? "処理中..."
+                : usePipeline
+                ? uploadDryRun
+                  ? "判定実行（ドライラン）"
+                  : "判定実行 → DB投入"
+                : "アップロード（判定なし）"}
             </button>
+
+            {/* 判定結果表示 */}
+            {uploadResult && usePipeline && (
+              <div className="space-y-3">
+                <div className="p-4 bg-teal-50 rounded-lg">
+                  <h3 className="font-medium text-teal-800 mb-2">
+                    判定パイプライン結果
+                    {uploadDryRun && (
+                      <span className="ml-2 text-xs text-teal-600">(ドライラン)</span>
+                    )}
+                  </h3>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-blue-600">
+                        {uploadResult.totalFetched}
+                      </div>
+                      <div className="text-xs text-blue-600">CSV行数</div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-green-600">
+                        {uploadResult.zeroOrderPassed}
+                      </div>
+                      <div className="text-xs text-green-600">0次通過</div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-purple-600">
+                        {uploadResult.firstOrderProcessed}
+                      </div>
+                      <div className="text-xs text-purple-600">1次処理</div>
+                    </div>
+                    <div className="bg-white p-2 rounded border border-teal-200">
+                      <div className="text-xl font-bold text-teal-600">
+                        {uploadResult.importedCount}
+                      </div>
+                      <div className="text-xs text-teal-600">DB投入</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* キーワード情報 */}
+                {uploadResult.keywordConfig && (
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="text-xs text-blue-700">
+                      <strong>サービス:</strong> {uploadResult.keywordConfig.serviceName}
+                      <span className="mx-2">|</span>
+                      <strong>必須KW:</strong> {uploadResult.keywordConfig.mustCount}件
+                      <span className="mx-2">|</span>
+                      <strong>推奨KW:</strong> {uploadResult.keywordConfig.shouldCount}件
+                    </div>
+                    {uploadResult.keywordConfig.mustKeywords && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {uploadResult.keywordConfig.mustKeywords.slice(0, 5).map((kw, i) => (
+                          <span
+                            key={i}
+                            className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded"
+                          >
+                            {kw}
+                          </span>
+                        ))}
+                        {uploadResult.keywordConfig.mustKeywords.length > 5 && (
+                          <span className="text-xs text-blue-500">
+                            +{uploadResult.keywordConfig.mustKeywords.length - 5}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* エラー表示 */}
+                {uploadResult.errors && uploadResult.errors.length > 0 && (
+                  <div className="p-3 bg-red-50 rounded-lg">
+                    <div className="text-xs text-red-700">
+                      <strong>エラー:</strong>
+                      <ul className="mt-1 list-disc list-inside">
+                        {uploadResult.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* CSV形式の説明 */}
