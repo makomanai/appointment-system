@@ -53,7 +53,6 @@ export function isPlaywrightAvailable(): boolean {
 const JS_NEXT_BASE_URL = "https://js-next.com";
 const JS_NEXT_LOGIN_URL = `${JS_NEXT_BASE_URL}/auth/login`;
 const JS_NEXT_DASHBOARD_URL = `${JS_NEXT_BASE_URL}/management-console/dashboard`;
-const JS_NEXT_SEARCH_URL = JS_NEXT_BASE_URL; // ログイン後のメイン検索画面
 
 // エクスポート検索条件
 export interface ExportSearchConditions {
