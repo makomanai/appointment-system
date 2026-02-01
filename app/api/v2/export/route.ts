@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, isSupabaseConfigured } from "../../../lib/supabase";
 
+// 動的レンダリングを強制（searchParamsを使用するため）
+export const dynamic = "force-dynamic";
+
 // CSVエクスポート（企業ごとにダウンロード可能）
 export async function GET(request: NextRequest) {
   if (!isSupabaseConfigured()) {
