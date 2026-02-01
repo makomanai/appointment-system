@@ -153,6 +153,18 @@ export default function AdminPage() {
     errors: string[];
   } | null>(null);
 
+  // 除外リスト管理用
+  const [exclusionCompanyId, setExclusionCompanyId] = useState("");
+  const [exclusionFile, setExclusionFile] = useState<File | null>(null);
+  const [isUploadingExclusion, setIsUploadingExclusion] = useState(false);
+  const [exclusions, setExclusions] = useState<Array<{
+    id: string;
+    prefecture: string | null;
+    city: string | null;
+    reason: string | null;
+  }>>([]);
+  const [clearExisting, setClearExisting] = useState(false);
+
   // 認証チェック
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -211,6 +223,91 @@ export default function AdminPage() {
       }
     } catch (error) {
       setMessage({ type: "error", text: "操作に失敗しました" });
+    }
+  };
+
+  // 除外リストを取得
+  const fetchExclusions = async (companyId: string) => {
+    if (!companyId) {
+      setExclusions([]);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/v2/exclusions?companyId=${companyId}`);
+      const result = await response.json();
+      if (result.success) {
+        setExclusions(result.data || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch exclusions:", error);
+    }
+  };
+
+  // 除外リスト企業選択時に取得
+  useEffect(() => {
+    fetchExclusions(exclusionCompanyId);
+  }, [exclusionCompanyId]);
+
+  // 除外リストCSVアップロード
+  const handleExclusionUpload = async () => {
+    if (!exclusionFile || !exclusionCompanyId) {
+      setMessage({ type: "error", text: "企業とファイルを選択してください" });
+      return;
+    }
+
+    setIsUploadingExclusion(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", exclusionFile);
+      formData.append("companyId", exclusionCompanyId);
+      formData.append("clearExisting", clearExisting.toString());
+
+      const response = await fetch("/api/v2/exclusions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessage({ type: "success", text: result.message });
+        setExclusionFile(null);
+        const fileInput = document.getElementById("exclusion-file") as HTMLInputElement;
+        if (fileInput) fileInput.value = "";
+        // 除外リストを再取得
+        await fetchExclusions(exclusionCompanyId);
+      } else {
+        setMessage({ type: "error", text: result.error || "アップロードに失敗しました" });
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "アップロードに失敗しました",
+      });
+    } finally {
+      setIsUploadingExclusion(false);
+    }
+  };
+
+  // 除外ルール削除
+  const handleDeleteExclusion = async (exclusionId: string) => {
+    try {
+      const response = await fetch("/api/v2/exclusions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exclusionId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setMessage({ type: "success", text: "除外ルールを削除しました" });
+        await fetchExclusions(exclusionCompanyId);
+      } else {
+        setMessage({ type: "error", text: result.error || "削除に失敗しました" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "削除に失敗しました" });
     }
   };
 
@@ -1134,6 +1231,134 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+          </div>
+        </section>
+
+        {/* 除外リスト管理セクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">
+            除外リスト管理
+            <span className="ml-2 text-xs font-normal text-gray-500">
+              契約済み・NG自治体
+            </span>
+          </h2>
+
+          <div className="space-y-4">
+            {/* 企業選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業を選択 *
+              </label>
+              <select
+                value={exclusionCompanyId}
+                onChange={(e) => setExclusionCompanyId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">-- 企業を選択 --</option>
+                {companies.map((company) => (
+                  <option key={company.companyId} value={company.companyId}>
+                    {company.companyId} - {company.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* CSVアップロード */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                除外リストCSV
+              </label>
+              <input
+                id="exclusion-file"
+                type="file"
+                accept=".csv"
+                onChange={(e) => setExclusionFile(e.target.files?.[0] || null)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                形式: 都道府県, 市区町村, 理由（ヘッダー行任意）
+              </p>
+
+              {/* 既存データ削除オプション */}
+              <label className="flex items-center mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clearExisting}
+                  onChange={(e) => setClearExisting(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-xs text-gray-600">
+                  既存の除外リストを削除してから登録
+                </span>
+              </label>
+
+              {/* アップロードボタン */}
+              <button
+                onClick={handleExclusionUpload}
+                disabled={isUploadingExclusion || !exclusionFile || !exclusionCompanyId}
+                className={`mt-3 w-full py-2 rounded-lg font-medium text-white ${
+                  isUploadingExclusion || !exclusionFile || !exclusionCompanyId
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {isUploadingExclusion ? "アップロード中..." : "除外リストをアップロード"}
+              </button>
+            </div>
+
+            {/* 現在の除外リスト */}
+            {exclusionCompanyId && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  現在の除外リスト ({exclusions.length}件)
+                </h3>
+                {exclusions.length === 0 ? (
+                  <p className="text-xs text-gray-500">除外リストが登録されていません</p>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-200 sticky top-0">
+                        <tr>
+                          <th className="px-2 py-1 text-left">都道府県</th>
+                          <th className="px-2 py-1 text-left">市区町村</th>
+                          <th className="px-2 py-1 text-left">理由</th>
+                          <th className="px-2 py-1 text-center w-12">削除</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {exclusions.map((ex) => (
+                          <tr key={ex.id} className="border-b border-gray-200">
+                            <td className="px-2 py-1">{ex.prefecture || "-"}</td>
+                            <td className="px-2 py-1">{ex.city || "-"}</td>
+                            <td className="px-2 py-1 text-gray-500">{ex.reason || "-"}</td>
+                            <td className="px-2 py-1 text-center">
+                              <button
+                                onClick={() => handleDeleteExclusion(ex.id)}
+                                className="text-red-500 hover:text-red-700"
+                                title="削除"
+                              >
+                                ×
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 説明 */}
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <h4 className="text-xs font-medium text-blue-800 mb-1">除外リストの使い方</h4>
+              <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
+                <li>パイプライン実行時に、登録済みの自治体は自動的に除外されます</li>
+                <li>都道府県のみ指定: その県全体を除外</li>
+                <li>都道府県+市区町村: 特定の自治体のみ除外</li>
+                <li>市区町村のみ: 全国でその市区町村名を除外</li>
+              </ul>
+            </div>
           </div>
         </section>
 

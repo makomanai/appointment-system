@@ -16,6 +16,7 @@ import {
 import { runZeroOrderFilter, buildServiceKeywordConfig } from "./zero-order-filter";
 import { runFirstOrderFilter } from "./first-order-filter";
 import { normalizeResults, toImportPayload } from "./normalizer";
+import { applyExclusionFilter } from "./exclusion-filter";
 
 /**
  * サービスIDからキーワード設定を取得
@@ -77,14 +78,40 @@ export async function runPipeline(
   console.log(`サービス: ${keywordConfig.serviceName}`);
   console.log(`ドライラン: ${dryRun}`);
 
+  // Step 0: 除外フィルター（契約済み・NG自治体を除外）
+  console.log("\n--- Step 0: 除外フィルター ---");
+  const { passed: filteredRows, excluded } = await applyExclusionFilter(rows, companyId);
+
+  if (excluded.length > 0) {
+    console.log(`[Pipeline] 除外: ${excluded.length}件`);
+    excluded.slice(0, 5).forEach((e) => {
+      console.log(`  - ${e.row.prefecture} ${e.row.city}: ${e.reason}`);
+    });
+    if (excluded.length > 5) {
+      console.log(`  ... 他${excluded.length - 5}件`);
+    }
+  }
+
+  if (filteredRows.length === 0) {
+    console.log("[Pipeline] 全件除外、パイプライン終了");
+    return {
+      totalFetched: rows.length,
+      zeroOrderPassed: 0,
+      firstOrderProcessed: 0,
+      importedCount: 0,
+      errors: [`全${rows.length}件が除外対象でした`],
+    };
+  }
+
   // Step 1: 0次判定
   console.log("\n--- Step 1: 0次判定 ---");
-  const zeroResults = runZeroOrderFilter(rows, keywordConfig, zeroOrderLimit);
+  const zeroResults = runZeroOrderFilter(filteredRows, keywordConfig, zeroOrderLimit);
 
   if (zeroResults.length === 0) {
     console.log("[Pipeline] 0次判定通過なし、パイプライン終了");
     return {
       totalFetched: rows.length,
+      excludedCount: excluded.length,
       zeroOrderPassed: 0,
       firstOrderProcessed: 0,
       importedCount: 0,
@@ -128,6 +155,7 @@ export async function runPipeline(
     console.log("[Pipeline] ドライラン: DB投入をスキップ");
     return {
       totalFetched: rows.length,
+      excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
       importedCount: 0,
@@ -139,6 +167,7 @@ export async function runPipeline(
     errors.push("Supabaseが設定されていません");
     return {
       totalFetched: rows.length,
+      excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
       importedCount: 0,
@@ -164,6 +193,7 @@ export async function runPipeline(
     errors.push(msg);
     return {
       totalFetched: rows.length,
+      excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
       importedCount: 0,
@@ -178,6 +208,7 @@ export async function runPipeline(
 
   return {
     totalFetched: rows.length,
+    excludedCount: excluded.length,
     zeroOrderPassed: zeroResults.length,
     firstOrderProcessed: firstResults.length,
     importedCount,
