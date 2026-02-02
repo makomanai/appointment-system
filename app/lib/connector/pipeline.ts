@@ -78,9 +78,13 @@ export async function runPipeline(
   console.log(`サービス: ${keywordConfig.serviceName}`);
   console.log(`ドライラン: ${dryRun}`);
 
-  // Step 0: 除外フィルター（契約済み・NG自治体を除外）
-  console.log("\n--- Step 0: 除外フィルター ---");
-  const { passed: filteredRows, excluded } = await applyExclusionFilter(rows, companyId);
+  // Step 0: 除外・アプローチ先フィルター（契約済み・NG自治体を除外、アプローチ先リストでフィルタ）
+  console.log("\n--- Step 0: 除外・アプローチ先フィルター ---");
+  const { passed: filteredRows, excluded, includedCount } = await applyExclusionFilter(rows, companyId);
+
+  if (includedCount !== undefined) {
+    console.log(`[Pipeline] アプローチ先フィルタ後: ${includedCount}件`);
+  }
 
   if (excluded.length > 0) {
     console.log(`[Pipeline] 除外: ${excluded.length}件`);
@@ -93,13 +97,15 @@ export async function runPipeline(
   }
 
   if (filteredRows.length === 0) {
-    console.log("[Pipeline] 全件除外、パイプライン終了");
+    console.log("[Pipeline] 全件フィルタ、パイプライン終了");
     return {
       totalFetched: rows.length,
+      includedCount,
+      excludedCount: excluded.length,
       zeroOrderPassed: 0,
       firstOrderProcessed: 0,
       importedCount: 0,
-      errors: [`全${rows.length}件が除外対象でした`],
+      errors: [`全${rows.length}件がフィルタ対象でした`],
     };
   }
 
@@ -111,6 +117,7 @@ export async function runPipeline(
     console.log("[Pipeline] 0次判定通過なし、パイプライン終了");
     return {
       totalFetched: rows.length,
+      includedCount,
       excludedCount: excluded.length,
       zeroOrderPassed: 0,
       firstOrderProcessed: 0,
@@ -155,6 +162,7 @@ export async function runPipeline(
     console.log("[Pipeline] ドライラン: DB投入をスキップ");
     return {
       totalFetched: rows.length,
+      includedCount,
       excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
@@ -167,6 +175,7 @@ export async function runPipeline(
     errors.push("Supabaseが設定されていません");
     return {
       totalFetched: rows.length,
+      includedCount,
       excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
@@ -193,6 +202,7 @@ export async function runPipeline(
     errors.push(msg);
     return {
       totalFetched: rows.length,
+      includedCount,
       excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
@@ -208,6 +218,7 @@ export async function runPipeline(
 
   return {
     totalFetched: rows.length,
+    includedCount,
     excludedCount: excluded.length,
     zeroOrderPassed: zeroResults.length,
     firstOrderProcessed: firstResults.length,

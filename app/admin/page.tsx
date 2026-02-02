@@ -165,6 +165,18 @@ export default function AdminPage() {
   }>>([]);
   const [clearExisting, setClearExisting] = useState(false);
 
+  // アプローチ先リスト管理用
+  const [inclusionCompanyId, setInclusionCompanyId] = useState("");
+  const [inclusionFile, setInclusionFile] = useState<File | null>(null);
+  const [isUploadingInclusion, setIsUploadingInclusion] = useState(false);
+  const [inclusions, setInclusions] = useState<Array<{
+    id: string;
+    prefecture: string | null;
+    city: string | null;
+    memo: string | null;
+  }>>([]);
+  const [clearExistingInclusion, setClearExistingInclusion] = useState(false);
+
   // 認証チェック
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -303,6 +315,90 @@ export default function AdminPage() {
       if (result.success) {
         setMessage({ type: "success", text: "除外ルールを削除しました" });
         await fetchExclusions(exclusionCompanyId);
+      } else {
+        setMessage({ type: "error", text: result.error || "削除に失敗しました" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "削除に失敗しました" });
+    }
+  };
+
+  // アプローチ先リストを取得
+  const fetchInclusions = async (companyId: string) => {
+    if (!companyId) {
+      setInclusions([]);
+      return;
+    }
+    try {
+      const response = await fetch(`/api/v2/inclusions?companyId=${companyId}`);
+      const result = await response.json();
+      if (result.success) {
+        setInclusions(result.data || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch inclusions:", error);
+    }
+  };
+
+  // アプローチ先リスト企業選択時に取得
+  useEffect(() => {
+    fetchInclusions(inclusionCompanyId);
+  }, [inclusionCompanyId]);
+
+  // アプローチ先リストCSVアップロード
+  const handleInclusionUpload = async () => {
+    if (!inclusionFile || !inclusionCompanyId) {
+      setMessage({ type: "error", text: "企業とファイルを選択してください" });
+      return;
+    }
+
+    setIsUploadingInclusion(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", inclusionFile);
+      formData.append("companyId", inclusionCompanyId);
+      formData.append("clearExisting", clearExistingInclusion.toString());
+
+      const response = await fetch("/api/v2/inclusions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessage({ type: "success", text: result.message });
+        setInclusionFile(null);
+        const fileInput = document.getElementById("inclusion-file") as HTMLInputElement;
+        if (fileInput) fileInput.value = "";
+        await fetchInclusions(inclusionCompanyId);
+      } else {
+        setMessage({ type: "error", text: result.error || "アップロードに失敗しました" });
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "アップロードに失敗しました",
+      });
+    } finally {
+      setIsUploadingInclusion(false);
+    }
+  };
+
+  // アプローチ先削除
+  const handleDeleteInclusion = async (inclusionId: string) => {
+    try {
+      const response = await fetch("/api/v2/inclusions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inclusionId }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setMessage({ type: "success", text: "アプローチ先を削除しました" });
+        await fetchInclusions(inclusionCompanyId);
       } else {
         setMessage({ type: "error", text: result.error || "削除に失敗しました" });
       }
@@ -1357,6 +1453,133 @@ export default function AdminPage() {
                 <li>都道府県のみ指定: その県全体を除外</li>
                 <li>都道府県+市区町村: 特定の自治体のみ除外</li>
                 <li>市区町村のみ: 全国でその市区町村名を除外</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* アプローチ先リスト管理セクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">
+            アプローチ先リスト管理
+            <span className="ml-2 text-xs font-normal text-green-600">
+              ホワイトリスト
+            </span>
+          </h2>
+
+          <div className="space-y-4">
+            {/* 企業選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業を選択 *
+              </label>
+              <select
+                value={inclusionCompanyId}
+                onChange={(e) => setInclusionCompanyId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">-- 企業を選択 --</option>
+                {companies.map((company) => (
+                  <option key={company.companyId} value={company.companyId}>
+                    {company.companyId} - {company.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* CSVアップロード */}
+            <div className="p-4 bg-green-50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                アプローチ先CSV
+              </label>
+              <input
+                id="inclusion-file"
+                type="file"
+                accept=".csv"
+                onChange={(e) => setInclusionFile(e.target.files?.[0] || null)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                形式: 都道府県, 市区町村, メモ（ヘッダー行任意）
+              </p>
+
+              {/* 既存データ削除オプション */}
+              <label className="flex items-center mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={clearExistingInclusion}
+                  onChange={(e) => setClearExistingInclusion(e.target.checked)}
+                  className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                />
+                <span className="ml-2 text-xs text-gray-600">
+                  既存のアプローチ先リストを削除してから登録
+                </span>
+              </label>
+
+              {/* アップロードボタン */}
+              <button
+                onClick={handleInclusionUpload}
+                disabled={isUploadingInclusion || !inclusionFile || !inclusionCompanyId}
+                className={`mt-3 w-full py-2 rounded-lg font-medium text-white ${
+                  isUploadingInclusion || !inclusionFile || !inclusionCompanyId
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-green-600 hover:bg-green-700"
+                }`}
+              >
+                {isUploadingInclusion ? "アップロード中..." : "アプローチ先をアップロード"}
+              </button>
+            </div>
+
+            {/* 現在のアプローチ先リスト */}
+            {inclusionCompanyId && (
+              <div className="p-4 bg-green-50 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-700 mb-2">
+                  現在のアプローチ先 ({inclusions.length}件)
+                </h3>
+                {inclusions.length === 0 ? (
+                  <p className="text-xs text-gray-500">アプローチ先が登録されていません（全自治体が対象）</p>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-green-200 sticky top-0">
+                        <tr>
+                          <th className="px-2 py-1 text-left">都道府県</th>
+                          <th className="px-2 py-1 text-left">市区町村</th>
+                          <th className="px-2 py-1 text-left">メモ</th>
+                          <th className="px-2 py-1 text-center w-12">削除</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {inclusions.map((inc) => (
+                          <tr key={inc.id} className="border-b border-green-200">
+                            <td className="px-2 py-1">{inc.prefecture || "-"}</td>
+                            <td className="px-2 py-1">{inc.city || "-"}</td>
+                            <td className="px-2 py-1 text-gray-500">{inc.memo || "-"}</td>
+                            <td className="px-2 py-1 text-center">
+                              <button
+                                onClick={() => handleDeleteInclusion(inc.id)}
+                                className="text-red-500 hover:text-red-700"
+                                title="削除"
+                              >
+                                ×
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 説明 */}
+            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+              <h4 className="text-xs font-medium text-green-800 mb-1">アプローチ先リストの使い方</h4>
+              <ul className="text-xs text-green-700 space-y-1 list-disc list-inside">
+                <li>登録すると、<strong>リスト内の自治体のみ</strong>がパイプラインを通過します</li>
+                <li>未登録の場合は全自治体が対象になります</li>
+                <li>除外リストと併用可能（アプローチ先フィルタ後に除外フィルタ適用）</li>
               </ul>
             </div>
           </div>

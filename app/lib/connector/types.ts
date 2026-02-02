@@ -100,6 +100,7 @@ export interface ConnectorConfig {
 // パイプライン全体の結果
 export interface PipelineResult {
   totalFetched: number;
+  includedCount?: number;      // アプローチ先リストでフィルタ後の件数
   excludedCount?: number;      // 除外フィルターで除外された件数
   zeroOrderPassed: number;
   firstOrderProcessed: number;
