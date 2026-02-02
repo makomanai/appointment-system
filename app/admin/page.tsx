@@ -177,6 +177,17 @@ export default function AdminPage() {
   }>>([]);
   const [clearExistingInclusion, setClearExistingInclusion] = useState(false);
 
+  // トピックアーカイブ用
+  const [archiveCompanyId, setArchiveCompanyId] = useState("");
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [archiveDryRun, setArchiveDryRun] = useState(true);
+  const [archiveResult, setArchiveResult] = useState<{
+    toArchive: number;
+    archived: number;
+    dryRun: boolean;
+    details?: Array<{ prefecture: string; city: string; title: string; reason: string }>;
+  } | null>(null);
+
   // 認証チェック
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -404,6 +415,53 @@ export default function AdminPage() {
       }
     } catch (error) {
       setMessage({ type: "error", text: "削除に失敗しました" });
+    }
+  };
+
+  // トピックアーカイブ実行
+  const handleArchiveTopics = async () => {
+    if (!archiveCompanyId) {
+      setMessage({ type: "error", text: "企業を選択してください" });
+      return;
+    }
+
+    setIsArchiving(true);
+    setMessage(null);
+    setArchiveResult(null);
+
+    try {
+      const response = await fetch("/api/v2/topics/archive-by-filter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: archiveCompanyId,
+          dryRun: archiveDryRun,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setArchiveResult({
+          toArchive: result.toArchive,
+          archived: result.archived,
+          dryRun: result.dryRun,
+          details: result.details,
+        });
+        setMessage({
+          type: "success",
+          text: result.message,
+        });
+      } else {
+        setMessage({ type: "error", text: result.error || "アーカイブに失敗しました" });
+      }
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "アーカイブに失敗しました",
+      });
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -1580,6 +1638,126 @@ export default function AdminPage() {
                 <li>登録すると、<strong>リスト内の自治体のみ</strong>がパイプラインを通過します</li>
                 <li>未登録の場合は全自治体が対象になります</li>
                 <li>除外リストと併用可能（アプローチ先フィルタ後に除外フィルタ適用）</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        {/* 既存トピックアーカイブセクション */}
+        <section className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-orange-300">
+          <h2 className="text-lg font-bold text-orange-800 mb-4">
+            既存トピックのアーカイブ
+            <span className="ml-2 text-xs font-normal text-orange-600">
+              リスト外を非表示化
+            </span>
+          </h2>
+
+          <p className="text-sm text-gray-600 mb-4">
+            除外リスト・アプローチ先リストに基づいて、既存のトピックをアーカイブ（非表示）します。
+          </p>
+
+          <div className="space-y-4">
+            {/* 企業選択 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                企業を選択 *
+              </label>
+              <select
+                value={archiveCompanyId}
+                onChange={(e) => {
+                  setArchiveCompanyId(e.target.value);
+                  setArchiveResult(null);
+                }}
+                className="w-full border border-orange-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">-- 企業を選択 --</option>
+                {companies.map((company) => (
+                  <option key={company.companyId} value={company.companyId}>
+                    {company.companyId} - {company.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* ドライラン設定 */}
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={archiveDryRun}
+                onChange={(e) => setArchiveDryRun(e.target.checked)}
+                className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+              />
+              <span className="ml-2 text-sm text-gray-600">
+                ドライラン（実際にはアーカイブせず対象を確認）
+              </span>
+            </label>
+
+            {/* 実行ボタン */}
+            <button
+              onClick={handleArchiveTopics}
+              disabled={isArchiving || !archiveCompanyId}
+              className={`w-full py-3 rounded-lg font-medium text-white ${
+                isArchiving || !archiveCompanyId
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : archiveDryRun
+                  ? "bg-orange-500 hover:bg-orange-600"
+                  : "bg-red-600 hover:bg-red-700"
+              }`}
+            >
+              {isArchiving
+                ? "処理中..."
+                : archiveDryRun
+                ? "対象を確認（ドライラン）"
+                : "アーカイブを実行"}
+            </button>
+
+            {/* 結果表示 */}
+            {archiveResult && (
+              <div className={`p-4 rounded-lg ${archiveResult.dryRun ? "bg-orange-50" : "bg-red-50"}`}>
+                <h3 className="font-medium text-gray-800 mb-2">
+                  {archiveResult.dryRun ? "アーカイブ対象（ドライラン）" : "アーカイブ完了"}
+                </h3>
+                <div className="text-sm mb-2">
+                  <span className="font-medium">{archiveResult.toArchive}件</span>がアーカイブ対象
+                  {!archiveResult.dryRun && (
+                    <span className="ml-2 text-green-600">
+                      → {archiveResult.archived}件をアーカイブ済み
+                    </span>
+                  )}
+                </div>
+
+                {archiveResult.details && archiveResult.details.length > 0 && (
+                  <div className="max-h-40 overflow-y-auto mt-2">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-200 sticky top-0">
+                        <tr>
+                          <th className="px-2 py-1 text-left">都道府県</th>
+                          <th className="px-2 py-1 text-left">市区町村</th>
+                          <th className="px-2 py-1 text-left">理由</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {archiveResult.details.map((detail, i) => (
+                          <tr key={i} className="border-b border-gray-200">
+                            <td className="px-2 py-1">{detail.prefecture || "-"}</td>
+                            <td className="px-2 py-1">{detail.city || "-"}</td>
+                            <td className="px-2 py-1 text-gray-500">{detail.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 注意書き */}
+            <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+              <h4 className="text-xs font-medium text-yellow-800 mb-1">注意</h4>
+              <ul className="text-xs text-yellow-700 space-y-1 list-disc list-inside">
+                <li>アーカイブされたトピックはメイン画面に表示されなくなります</li>
+                <li>データは削除されません（復元可能）</li>
+                <li>まずドライランで対象を確認してから実行してください</li>
               </ul>
             </div>
           </div>

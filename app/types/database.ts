@@ -63,6 +63,9 @@ export interface Topic {
   script_draft: string | null;
   ai_summary: string | null;
 
+  // アーカイブ（非表示）
+  is_archived: boolean;
+
   created_at: string;
   updated_at: string;
 }

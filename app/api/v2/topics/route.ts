@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabaseClient();
     const searchParams = request.nextUrl.searchParams;
     const companyId = searchParams.get("companyId");
+    const includeArchived = searchParams.get("includeArchived") === "true";
 
     let query = supabase
       .from("topics")
@@ -27,6 +28,11 @@ export async function GET(request: NextRequest) {
 
     if (companyId) {
       query = query.eq("company_id", companyId);
+    }
+
+    // デフォルトでアーカイブ済みを除外
+    if (!includeArchived) {
+      query = query.eq("is_archived", false);
     }
 
     const { data, error } = await query;
