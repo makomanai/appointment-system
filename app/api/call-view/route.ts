@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // トピックと最新の架電結果を取得
+      // トピックと最新の架電結果を取得（アーカイブ済みを除外）
       const { data: topics, error } = await supabase
         .from("topics")
         .select(`
@@ -197,6 +197,7 @@ export async function GET(request: NextRequest) {
           )
         `)
         .eq("company_id", targetCompanyId)
+        .eq("is_archived", false)
         .order("created_at", { ascending: false });
 
       if (error) {
