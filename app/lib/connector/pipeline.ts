@@ -17,6 +17,7 @@ import { runZeroOrderFilter, buildServiceKeywordConfig } from "./zero-order-filt
 import { runFirstOrderFilter } from "./first-order-filter";
 import { normalizeResults, toImportPayload } from "./normalizer";
 import { applyExclusionFilter } from "./exclusion-filter";
+import { runAiRanking, getServiceInfoForCompany, ServiceInfo } from "./ai-ranker";
 
 /**
  * サービスIDからキーワード設定を取得
@@ -53,7 +54,7 @@ export async function getServiceKeywordConfig(
 }
 
 /**
- * パイプライン実行（0次→一次→正規化→DB投入）
+ * パイプライン実行（0次→一次→AI判定→正規化→DB投入）
  */
 export async function runPipeline(
   rows: JsNextExportRow[],
@@ -62,12 +63,14 @@ export async function runPipeline(
   options: {
     zeroOrderLimit?: number;
     firstOrderLimit?: number; // 1次判定前の足切り上限
+    enableAiRanking?: boolean; // AI判定を有効化
     dryRun?: boolean;
   } = {}
 ): Promise<PipelineResult> {
   const {
     zeroOrderLimit = 0, // 0 = 制限なし（B評価以上を全件通過）
     firstOrderLimit = 100, // 1次判定前の足切り上限（デフォルト100件）
+    enableAiRanking = true, // デフォルトでAI判定を有効化
     dryRun = false
   } = options;
   const errors: string[] = [];
@@ -151,6 +154,83 @@ export async function runPipeline(
     }));
   }
 
+  // Step 2.5: AI判定（SRTテキスト + サービス情報で最終ランク付け）
+  let priorityMap: Map<string, "A" | "B" | "C"> | undefined;
+  let aiRankedCount = 0;
+  let aiRankDistribution: { A: number; B: number; C: number } | undefined;
+
+  if (enableAiRanking && process.env.OPENAI_API_KEY) {
+    console.log("\n--- Step 2.5: AI判定 ---");
+
+    try {
+      // サービス情報を取得
+      const supabase = createServerSupabaseClient();
+      const serviceInfo = await getServiceInfoForCompany(companyId, supabase);
+
+      // AI判定実行
+      const aiResults = await runAiRanking(firstResults, serviceInfo, {
+        maxConcurrent: 3,
+        onProgress: (current, total) => {
+          console.log(`[AI判定] 進捗: ${current}/${total}`);
+        },
+      });
+
+      // priority マップを構築（row識別子 → priority）
+      priorityMap = new Map();
+      for (const result of aiResults) {
+        const { row } = result;
+        // company_row_key と同じロジックで識別子を生成
+        let key: string;
+        if (row.group_id) {
+          key = `${companyId}_${row.group_id}_${row.start_sec}_${row.end_sec}`.replace(
+            /[^a-zA-Z0-9_\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF-]/g,
+            ""
+          );
+        } else if (row.external_id) {
+          key = `${companyId}_${row.external_id}_${row.start_sec}_${row.end_sec}`.replace(
+            /[^a-zA-Z0-9_\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF-]/g,
+            ""
+          );
+        } else {
+          // ハッシュベースのキー
+          const base = [
+            companyId,
+            row.prefecture || "",
+            row.city || "",
+            row.council_date || "",
+            row.title || "",
+            String(row.start_sec || 0),
+            String(row.end_sec || 0),
+          ].join("_");
+          let hash = 0;
+          for (let i = 0; i < base.length; i++) {
+            const char = base.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+          }
+          key = `${companyId}_${Math.abs(hash).toString(36)}`.replace(
+            /[^a-zA-Z0-9_\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/g,
+            ""
+          );
+        }
+        priorityMap.set(key, result.aiRank.priority);
+      }
+
+      // AI判定の統計
+      aiRankedCount = aiResults.length;
+      aiRankDistribution = { A: 0, B: 0, C: 0 };
+      aiResults.forEach((r) => aiRankDistribution![r.aiRank.priority]++);
+      console.log(`[AI判定] 完了:`, aiRankDistribution);
+    } catch (error) {
+      const msg = `AI判定エラー: ${error instanceof Error ? error.message : "Unknown"}`;
+      console.error(msg);
+      errors.push(msg);
+      // AI判定失敗時は priority = null のまま進める
+    }
+  } else if (enableAiRanking && !process.env.OPENAI_API_KEY) {
+    console.log("\n[Pipeline] OPENAI_API_KEY未設定、AI判定をスキップ");
+  }
+
   // Step 3: 正規化
   console.log("\n--- Step 3: 正規化 ---");
   const normalized = normalizeResults(firstResults, companyId);
@@ -166,6 +246,8 @@ export async function runPipeline(
       excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
+      aiRankedCount: aiRankedCount > 0 ? aiRankedCount : undefined,
+      aiRankDistribution,
       importedCount: 0,
       errors,
     };
@@ -179,13 +261,15 @@ export async function runPipeline(
       excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
+      aiRankedCount: aiRankedCount > 0 ? aiRankedCount : undefined,
+      aiRankDistribution,
       importedCount: 0,
       errors,
     };
   }
 
-  // 既存取り込みと同じ形式でDBに投入
-  const importPayload = toImportPayload(normalized, companyId);
+  // 既存取り込みと同じ形式でDBに投入（AI判定結果のpriorityを含む）
+  const importPayload = toImportPayload(normalized, companyId, priorityMap);
   const supabase = createServerSupabaseClient();
 
   const { data, error } = await supabase
@@ -206,6 +290,8 @@ export async function runPipeline(
       excludedCount: excluded.length,
       zeroOrderPassed: zeroResults.length,
       firstOrderProcessed: firstResults.length,
+      aiRankedCount: aiRankedCount > 0 ? aiRankedCount : undefined,
+      aiRankDistribution,
       importedCount: 0,
       errors,
     };
@@ -222,6 +308,8 @@ export async function runPipeline(
     excludedCount: excluded.length,
     zeroOrderPassed: zeroResults.length,
     firstOrderProcessed: firstResults.length,
+    aiRankedCount: aiRankedCount > 0 ? aiRankedCount : undefined,
+    aiRankDistribution,
     importedCount,
     errors,
   };

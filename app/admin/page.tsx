@@ -820,7 +820,7 @@ export default function AdminPage() {
     }
   };
 
-  // AI判定版ランク付け処理
+  // AI判定ランク付け処理（統合版）
   const handleAiRank = async () => {
     if (!aiRankCompanyId) {
       return;
@@ -830,15 +830,16 @@ export default function AdminPage() {
     setAiRankResult(null);
 
     try {
-      const response = await fetch("/api/v2/topics/rank-ai", {
+      // 統合API（サービス情報 + SRTテキスト使用、DB更新あり）
+      const response = await fetch("/api/v2/topics/rerank", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           companyId: aiRankCompanyId,
-          updateDb: false, // テスト時はDB更新しない
           limit: aiRankLimit,
+          forceUpdate: true, // 既存のpriorityも再判定
         }),
       });
 
@@ -2262,95 +2263,14 @@ export default function AdminPage() {
           </div>
         </section>
 
-        {/* AIランク付けセクション */}
+        {/* AI判定セクション（統合版） */}
         <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
           <h2 className="text-lg font-bold text-gray-800 mb-4">
-            AI自動ランク付け（ゴールデンルール）
+            AI自動ランク付け
           </h2>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={rankCompanyId}
-                onChange={(e) => setRankCompanyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* ランク結果表示 */}
-            {rankResult && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-gray-800 mb-2">ランク付け結果</h3>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="bg-red-100 p-2 rounded">
-                    <div className="text-2xl font-bold text-red-600">{rankResult.S}</div>
-                    <div className="text-xs text-red-600">Sランク</div>
-                  </div>
-                  <div className="bg-orange-100 p-2 rounded">
-                    <div className="text-2xl font-bold text-orange-600">{rankResult.A}</div>
-                    <div className="text-xs text-orange-600">Aランク</div>
-                  </div>
-                  <div className="bg-yellow-100 p-2 rounded">
-                    <div className="text-2xl font-bold text-yellow-600">{rankResult.B}</div>
-                    <div className="text-xs text-yellow-600">Bランク</div>
-                  </div>
-                  <div className="bg-gray-200 p-2 rounded">
-                    <div className="text-2xl font-bold text-gray-600">{rankResult.C}</div>
-                    <div className="text-xs text-gray-600">Cランク</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ランク付けボタン */}
-            <button
-              onClick={handleRank}
-              disabled={isRanking || !rankCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isRanking || !rankCompanyId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-700"
-              }`}
-            >
-              {isRanking ? "ランク付け中..." : "AIランク付け実行"}
-            </button>
-          </div>
-
-          {/* ゴールデンルール説明 */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h3 className="text-sm font-medium text-blue-800 mb-2">
-              ゴールデンルール スコアリング
-            </h3>
-            <ul className="text-xs text-blue-700 space-y-1">
-              <li><strong>タイミング (+4点):</strong> 来年度, 計画策定, 移行, 予算 など</li>
-              <li><strong>具体的手段 (+5点):</strong> システム, アプリ, DX, チャットボット など</li>
-              <li><strong>定量的根拠 (+3点):</strong> 削減, 効果, 課題, 未達 など</li>
-              <li><strong>慎重姿勢 (-10点):</strong> 時期尚早, 見送り など</li>
-              <li><strong>手遅れ (-5点):</strong> 契約済み, 導入済み など</li>
-            </ul>
-            <p className="text-xs text-blue-600 mt-2">
-              S: 10点以上 / A: 6〜9点 / B: 1〜5点 / C: 0点以下
-            </p>
-          </div>
-        </section>
-
-        {/* AI判定版ランク付けセクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-purple-300">
-          <h2 className="text-lg font-bold text-purple-800 mb-4">
-            AI自動ランク付け（GPT-5.2判定版）
-            <span className="ml-2 text-xs font-normal text-purple-600 bg-purple-100 px-2 py-1 rounded">テスト機能</span>
-          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            サービス情報と字幕テキストを使用してAI判定を行います。
+          </p>
 
           <div className="space-y-4">
             {/* 企業選択 */}
@@ -2361,7 +2281,7 @@ export default function AdminPage() {
               <select
                 value={aiRankCompanyId}
                 onChange={(e) => setAiRankCompanyId(e.target.value)}
-                className="w-full border border-purple-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">-- 企業を選択 --</option>
                 {companies.map((company) => (
@@ -2375,12 +2295,12 @@ export default function AdminPage() {
             {/* 件数制限 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                テスト件数（コスト節約のため）
+                処理件数
               </label>
               <select
                 value={aiRankLimit}
                 onChange={(e) => setAiRankLimit(Number(e.target.value))}
-                className="w-full border border-purple-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value={10}>10件</option>
                 <option value={20}>20件</option>
@@ -2396,10 +2316,10 @@ export default function AdminPage() {
               className={`w-full py-3 rounded-lg font-medium text-white ${
                 isAiRanking || !aiRankCompanyId
                   ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-purple-600 hover:bg-purple-700"
+                  : "bg-blue-600 hover:bg-blue-700"
               }`}
             >
-              {isAiRanking ? "AI判定中..." : "GPT-5.2でランク判定（テスト）"}
+              {isAiRanking ? "AI判定中..." : "AI判定実行"}
             </button>
 
             {/* AI判定結果表示 */}
@@ -2421,14 +2341,14 @@ export default function AdminPage() {
                     link.click();
                     URL.revokeObjectURL(url);
                   }}
-                  className="w-full py-2 rounded-lg font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 border border-purple-300"
+                  className="w-full py-2 rounded-lg font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 border border-blue-300"
                 >
-                  📥 判定結果をCSVダウンロード
+                  判定結果をCSVダウンロード
                 </button>
 
                 {/* サマリー */}
-                <div className="p-4 bg-purple-50 rounded-lg">
-                  <h3 className="font-medium text-purple-800 mb-2">AI判定結果サマリー</h3>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h3 className="font-medium text-gray-800 mb-2">AI判定結果</h3>
                   <div className="grid grid-cols-4 gap-2 text-center">
                     <div className="bg-red-100 p-2 rounded">
                       <div className="text-2xl font-bold text-red-600">{aiRankResult.summary.S}</div>
@@ -2477,18 +2397,15 @@ export default function AdminPage() {
 
           {/* 説明 */}
           <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-            <h3 className="text-sm font-medium text-purple-800 mb-2">
-              GPT-5.2判定の特徴
+            <h3 className="text-sm font-medium text-gray-800 mb-2">
+              AI判定の仕組み
             </h3>
-            <ul className="text-xs text-purple-700 space-y-1 list-disc list-inside">
-              <li>文脈を理解した高精度な判定</li>
-              <li>判定理由を自然言語で説明</li>
-              <li>サービス情報と連携した判定</li>
-              <li>テスト時はDB更新なし（確認後に適用可能）</li>
+            <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
+              <li>登録済みサービス情報との関連性を重視</li>
+              <li>字幕テキスト（SRT）の内容を分析</li>
+              <li>時期・予算・具体性などを総合判定</li>
+              <li>S/Aランク → priority: A, B → B, C → C</li>
             </ul>
-            <p className="text-xs text-purple-600 mt-2">
-              ※ 推定コスト: 約$0.005/件（500件で約$2.50）
-            </p>
           </div>
         </section>
 

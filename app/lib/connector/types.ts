@@ -104,6 +104,12 @@ export interface PipelineResult {
   excludedCount?: number;      // 除外フィルターで除外された件数
   zeroOrderPassed: number;
   firstOrderProcessed: number;
+  aiRankedCount?: number;      // AI判定した件数
+  aiRankDistribution?: {       // AI判定結果の分布
+    A: number;
+    B: number;
+    C: number;
+  };
   importedCount: number;
   errors: string[];
 }

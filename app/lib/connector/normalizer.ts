@@ -225,10 +225,13 @@ function generateCompanyRowKey(row: NormalizedTopicRow, companyId: string): stri
 /**
  * 正規化済みデータを既存インポートが受け入れるJSONオブジェクト配列に変換
  * （FormDataではなくプログラマティックに渡す場合）
+ *
+ * @param priorityMap - company_row_key → priority のマップ（AI判定結果）
  */
 export function toImportPayload(
   rows: NormalizedTopicRow[],
-  companyId: string
+  companyId: string,
+  priorityMap?: Map<string, "A" | "B" | "C">
 ): Array<{
   company_id: string;
   company_row_key: string;
@@ -287,7 +290,7 @@ export function toImportPayload(
       category: row.category || null,
       stance: row.stance || null,
       status: "未着手",
-      priority: null, // AI判定で設定される（初期はnull）
+      priority: priorityMap?.get(companyRowKey) || null, // AI判定結果があれば使用
       dispatch_status: "NOT_SENT",
     };
   });
