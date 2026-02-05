@@ -53,7 +53,6 @@ export default function AdminPage() {
   // AIランク付け用（AI判定版）
   const [aiRankCompanyId, setAiRankCompanyId] = useState("");
   const [aiRankLimit, setAiRankLimit] = useState(50);
-  const [aiRankIncludeC, setAiRankIncludeC] = useState(false); // C判定済みも含める
   const [isAiRanking, setIsAiRanking] = useState(false);
   const [aiRankResult, setAiRankResult] = useState<{
     summary: { S: number; A: number; B: number; C: number };
@@ -832,8 +831,7 @@ export default function AdminPage() {
 
     try {
       // 統合API（サービス情報 + SRTテキスト使用、DB更新あり）
-      // forceUpdate: true → A/B/null を再判定
-      // skipC: !aiRankIncludeC → チェック時はCも含める
+      // 除外: C判定済み、完了済み、アーカイブ済み
       const response = await fetch("/api/v2/topics/rerank", {
         method: "POST",
         headers: {
@@ -842,8 +840,6 @@ export default function AdminPage() {
         body: JSON.stringify({
           companyId: aiRankCompanyId,
           limit: aiRankLimit,
-          forceUpdate: true, // 既存データも判定
-          skipC: !aiRankIncludeC, // チェックなし→Cを除外、チェックあり→Cも含む
         }),
       });
 
@@ -2311,20 +2307,6 @@ export default function AdminPage() {
                 <option value={50}>50件</option>
                 <option value={100}>100件</option>
               </select>
-            </div>
-
-            {/* C判定済みも含めるオプション */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="includeC"
-                checked={aiRankIncludeC}
-                onChange={(e) => setAiRankIncludeC(e.target.checked)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="includeC" className="text-sm text-gray-700">
-                C判定済みも再判定する
-              </label>
             </div>
 
             {/* AI判定ボタン */}
