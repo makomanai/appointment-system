@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { companyId, limit = 50, forceUpdate = false } = body;
+    const { companyId, limit = 50, forceUpdate = false, skipC = true } = body;
 
     if (!companyId) {
       return NextResponse.json(
@@ -43,16 +43,25 @@ export async function POST(request: NextRequest) {
     console.log("Service info:", serviceInfo?.name || "なし");
 
     // 対象トピックを取得
+    // 条件:
+    // - is_archived = false (アーカイブ済みは除外)
+    // - forceUpdate = false → priority が null のもののみ
+    // - forceUpdate = true → A/B/null を再判定
+    // - skipC = true → C判定済みは常に除外（コスト削減）
     let query = supabase
       .from("topics")
       .select("id, title, summary, excerpt_text, priority")
       .eq("company_id", companyId)
       .eq("is_archived", false);
 
-    // forceUpdate=false の場合、priority が未設定のもののみ
     if (!forceUpdate) {
+      // デフォルト: priority が未設定のもののみ
       query = query.is("priority", null);
+    } else if (skipC) {
+      // forceUpdate でも C は除外（null, A, B のみ）
+      query = query.or("priority.is.null,priority.eq.A,priority.eq.B");
     }
+    // forceUpdate=true & skipC=false なら全て対象（通常使わない）
 
     const { data: topics, error } = await query.limit(limit);
 

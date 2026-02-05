@@ -831,6 +831,8 @@ export default function AdminPage() {
 
     try {
       // 統合API（サービス情報 + SRTテキスト使用、DB更新あり）
+      // forceUpdate: false → priority=null のみ処理（安全）
+      // skipC: true → C判定済みは除外（コスト削減）
       const response = await fetch("/api/v2/topics/rerank", {
         method: "POST",
         headers: {
@@ -839,7 +841,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           companyId: aiRankCompanyId,
           limit: aiRankLimit,
-          forceUpdate: true, // 既存のpriorityも再判定
+          forceUpdate: false, // 未判定(priority=null)のみ
+          skipC: true, // C判定済みは除外
         }),
       });
 
