@@ -37,13 +37,13 @@ async function callOpenAI(
   }
 
   const requestBody = {
-    model: "gpt-4o-mini", // コスト効率の良いモデル
+    model: "gpt-5.2-2025-12-11", // 高度な推論が必要なため最新モデルを使用
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
     temperature: 0.2,
-    max_tokens: 500,
+    max_tokens: 400, // Cランクは理由省略のため削減
     response_format: { type: "json_object" },
   };
 
@@ -114,14 +114,18 @@ ${serviceInfo ? "- 対象サービスとの関連性が低い" : ""}
 {
   "rank": "S" | "A" | "B" | "C",
   "score": 0-12の数値,
-  "reasoning": "判定理由を1-2文で",
+  "reasoning": "判定理由を1-2文で（Cランクの場合は空文字）",
   "keyPoints": {
     "positive": ["ポジティブなポイント"],
     "negative": ["ネガティブなポイント"]
   }
 }
 
-スコア目安: S: 10-12点, A: 7-9点, B: 4-6点, C: 0-3点`;
+スコア目安: S: 10-12点, A: 7-9点, B: 4-6点, C: 0-3点
+
+【重要】コスト削減のため:
+- S/A/Bランクの場合: reasoningとkeyPointsを詳細に記載
+- Cランクの場合: reasoning は空文字("")、keyPointsは空配列([])で出力`;
 
   const serviceSection = serviceInfo
     ? `【対象サービス】

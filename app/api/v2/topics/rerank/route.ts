@@ -64,9 +64,7 @@ export async function POST(request: NextRequest) {
     if (!topics || topics.length === 0) {
       return NextResponse.json({
         success: true,
-        message: forceUpdate
-          ? "対象のトピックがありません"
-          : "未ランク付けのトピックがありません",
+        message: "未ランク付けのトピックがありません（AI判定済み、C判定、完了、アーカイブは除外）",
         summary: { A: 0, B: 0, C: 0 },
         processed: 0,
       });
