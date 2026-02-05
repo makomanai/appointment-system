@@ -47,13 +47,14 @@ export async function POST(request: NextRequest) {
     // - is_archived = true (アーカイブ済み)
     // - priority = C (C判定済み)
     // - status = 完了 (完了済み)
+    // - ai_ranked_at IS NOT NULL (AI判定済み)
     const { data: topics, error } = await supabase
       .from("topics")
-      .select("id, title, summary, excerpt_text, priority, status")
+      .select("id, title, summary, excerpt_text, priority, status, ai_ranked_at")
       .eq("company_id", companyId)
       .eq("is_archived", false)
-      .neq("priority", "C")
       .neq("status", "完了")
+      .is("ai_ranked_at", null) // AI判定がまだのもののみ
       .limit(limit);
 
     if (error) {
@@ -101,13 +102,14 @@ export async function POST(request: NextRequest) {
 
         rankCounts[aiResult.priority]++;
 
-        // DBを更新
-        if (topic.priority !== aiResult.priority) {
-          await supabase
-            .from("topics")
-            .update({ priority: aiResult.priority })
-            .eq("id", topic.id);
-        }
+        // DBを更新（priority + ai_ranked_at）
+        await supabase
+          .from("topics")
+          .update({
+            priority: aiResult.priority,
+            ai_ranked_at: new Date().toISOString(), // AI判定済みフラグ
+          })
+          .eq("id", topic.id);
 
         // 進捗ログ
         if ((i + 1) % 10 === 0) {

@@ -62,6 +62,7 @@ export interface Topic {
   // AI生成
   script_draft: string | null;
   ai_summary: string | null;
+  ai_ranked_at: string | null; // AI判定実行日時
 
   // アーカイブ（非表示）
   is_archived: boolean;
