@@ -14,126 +14,18 @@ export default function AdminPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
+  // 基本state
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // CSVアップロード + 判定パイプライン用
-  const [usePipeline, setUsePipeline] = useState(true); // デフォルトでパイプライン使用
-  const [uploadServiceId, setUploadServiceId] = useState("");
-  const [uploadDryRun, setUploadDryRun] = useState(true);
-  const [uploadResult, setUploadResult] = useState<{
+  // データ取込用
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{
     totalFetched: number;
     zeroOrderPassed: number;
-    firstOrderProcessed: number;
     importedCount: number;
-    keywordConfig?: {
-      serviceName: string;
-      mustCount: number;
-      shouldCount: number;
-      mustKeywords: string[];
-    };
-    errors?: string[];
-  } | null>(null);
-
-  // CSVプレビュー用
-  const [csvPreview, setCsvPreview] = useState<{
-    headers: string[];
-    rows: string[][];
-    mappedHeaders: Record<string, string>;
-  } | null>(null);
-
-  // AIランク付け用（キーワード版）
-  const [rankCompanyId, setRankCompanyId] = useState("");
-  const [isRanking, setIsRanking] = useState(false);
-  const [rankResult, setRankResult] = useState<{ S: number; A: number; B: number; C: number } | null>(null);
-
-  // AIランク付け用（AI判定版）
-  const [aiRankCompanyId, setAiRankCompanyId] = useState("");
-  const [aiRankLimit, setAiRankLimit] = useState(50);
-  const [isAiRanking, setIsAiRanking] = useState(false);
-  const [aiRankResult, setAiRankResult] = useState<{
-    summary: { S: number; A: number; B: number; C: number };
-    results: Array<{
-      topicId: string;
-      title: string;
-      rank: string;
-      score: number;
-      reasoning: string;
-      oldPriority?: string;
-      newPriority?: string;
-    }>;
-  } | null>(null);
-
-  // SRT読み込み用（手動）
-  const [srtFile, setSrtFile] = useState<File | null>(null);
-  const [srtGroupId, setSrtGroupId] = useState("");
-  const [isParsingSrt, setIsParsingSrt] = useState(false);
-  const [srtLinkResult, setSrtLinkResult] = useState<{
-    updatedCount: number;
-    skippedCount: number;
-    topicsFound: number;
-    srtEntries: number;
-  } | null>(null);
-
-  // SRT自動紐付け用（Google Drive）
-  const [autoLinkCompanyId, setAutoLinkCompanyId] = useState("");
-  const [isAutoLinking, setIsAutoLinking] = useState(false);
-  const [autoLinkResult, setAutoLinkResult] = useState<{
-    processed: number;
-    updated: number;
-    skipped: number;
-    failed: number;
-  } | null>(null);
-
-  // AI要約生成用
-  const [summarizeCompanyId, setSummarizeCompanyId] = useState("");
-  const [isSummarizing, setIsSummarizing] = useState(false);
-  const [summarizeResult, setSummarizeResult] = useState<{
-    processed: number;
-    updated: number;
-    skipped: number;
-    failed: number;
-  } | null>(null);
-
-  // 企業新規登録用
-  const [newCompanyName, setNewCompanyName] = useState("");
-  const [isCreatingCompany, setIsCreatingCompany] = useState(false);
-
-  // 非表示企業管理用
-  const [hiddenCompanies, setHiddenCompanies] = useState<Company[]>([]);
-  const [showHiddenCompanies, setShowHiddenCompanies] = useState(false);
-
-  // コネクタ（データ自動取込）用
-  interface ServiceOption {
-    id: string;
-    name: string;
-    description: string;
-  }
-  const [services, setServices] = useState<ServiceOption[]>([]);
-  const [connectorCompanyId, setConnectorCompanyId] = useState("");
-  const [connectorServiceId, setConnectorServiceId] = useState("");
-  const [connectorDryRun, setConnectorDryRun] = useState(true);
-  const [isConnectorRunning, setIsConnectorRunning] = useState(false);
-  const [connectorResult, setConnectorResult] = useState<{
-    totalFetched: number;
-    zeroOrderPassed: number;
-    firstOrderProcessed: number;
-    importedCount: number;
-    fetchInfo?: {
-      isInitial: boolean;
-      dateRange: { start: string; end: string };
-      previousFetch: string | null;
-    };
-    keywordConfig?: {
-      serviceName: string;
-      mustCount: number;
-      shouldCount: number;
-      mustKeywords: string[];
-    };
-    errors?: string[];
+    aiRankDistribution?: { A: number; B: number; C: number };
   } | null>(null);
 
   // ダッシュボード統計用
@@ -144,48 +36,24 @@ export default function AdminPage() {
     recentImports: { today: number; thisWeek: number; thisMonth: number };
   } | null>(null);
 
-  // ワンクリック一括処理用
-  const [batchCompanyId, setBatchCompanyId] = useState("");
-  const [isBatchRunning, setIsBatchRunning] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<{
-    step: string;
-    completed: string[];
-    errors: string[];
-  } | null>(null);
+  // 詳細設定の展開状態
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // 除外リスト管理用
-  const [exclusionCompanyId, setExclusionCompanyId] = useState("");
+  // 詳細設定用state
+  const [hiddenCompanies, setHiddenCompanies] = useState<Company[]>([]);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [isCreatingCompany, setIsCreatingCompany] = useState(false);
+
+  // 除外/アプローチリスト
   const [exclusionFile, setExclusionFile] = useState<File | null>(null);
-  const [isUploadingExclusion, setIsUploadingExclusion] = useState(false);
-  const [exclusions, setExclusions] = useState<Array<{
-    id: string;
-    prefecture: string | null;
-    city: string | null;
-    reason: string | null;
-  }>>([]);
-  const [clearExisting, setClearExisting] = useState(false);
-
-  // アプローチ先リスト管理用
-  const [inclusionCompanyId, setInclusionCompanyId] = useState("");
   const [inclusionFile, setInclusionFile] = useState<File | null>(null);
-  const [isUploadingInclusion, setIsUploadingInclusion] = useState(false);
-  const [inclusions, setInclusions] = useState<Array<{
-    id: string;
-    prefecture: string | null;
-    city: string | null;
-    memo: string | null;
-  }>>([]);
-  const [clearExistingInclusion, setClearExistingInclusion] = useState(false);
+  const [isUploadingList, setIsUploadingList] = useState(false);
 
-  // トピックアーカイブ用
-  const [archiveCompanyId, setArchiveCompanyId] = useState("");
-  const [isArchiving, setIsArchiving] = useState(false);
-  const [archiveDryRun, setArchiveDryRun] = useState(true);
-  const [archiveResult, setArchiveResult] = useState<{
-    toArchive: number;
-    archived: number;
-    dryRun: boolean;
-    details?: Array<{ prefecture: string; city: string; title: string; reason: string }>;
+  // AI再判定用
+  const [isReranking, setIsReranking] = useState(false);
+  const [rerankResult, setRerankResult] = useState<{
+    summary: { A: number; B: number; C: number };
+    processed: number;
   } | null>(null);
 
   // 認証チェック
@@ -195,17 +63,20 @@ export default function AdminPage() {
     }
   }, [status, router]);
 
-  // 企業一覧を取得（表示中・非表示の両方）
+  // 企業一覧を取得
   const fetchAllCompanies = async () => {
     try {
-      // 表示中の企業を取得
       const response = await fetch("/api/companies");
       const result = await response.json();
       if (result.success) {
         setCompanies(result.data || []);
+        // 最初の企業を自動選択
+        if (result.data?.length > 0 && !selectedCompanyId) {
+          setSelectedCompanyId(result.data[0].companyId);
+        }
       }
 
-      // 非表示の企業を取得
+      // 非表示企業も取得
       const hiddenResponse = await fetch("/api/v2/companies?includeHidden=true");
       const hiddenResult = await hiddenResponse.json();
       if (hiddenResult.success) {
@@ -224,428 +95,113 @@ export default function AdminPage() {
     }
   };
 
+  // ダッシュボード統計を取得
+  const fetchStats = async () => {
+    try {
+      const response = await fetch("/api/v2/stats");
+      const result = await response.json();
+      if (result.success) {
+        setStats(result.stats);
+      }
+    } catch (error) {
+      console.error("Failed to fetch stats:", error);
+    }
+  };
+
   useEffect(() => {
     fetchAllCompanies();
+    fetchStats();
   }, []);
 
-  // 企業の非表示/表示を切り替え
-  const toggleCompanyVisibility = async (companyId: string, hide: boolean) => {
-    try {
-      const response = await fetch("/api/v2/companies", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company_id: companyId, is_hidden: hide }),
-      });
-      const result = await response.json();
-      if (result.success) {
-        setMessage({ type: "success", text: result.message });
-        // 企業一覧を再取得
-        await fetchAllCompanies();
-      } else {
-        setMessage({ type: "error", text: result.error || "操作に失敗しました" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "操作に失敗しました" });
-    }
-  };
-
-  // 除外リストを取得
-  const fetchExclusions = async (companyId: string) => {
-    if (!companyId) {
-      setExclusions([]);
-      return;
-    }
-    try {
-      const response = await fetch(`/api/v2/exclusions?companyId=${companyId}`);
-      const result = await response.json();
-      if (result.success) {
-        setExclusions(result.data || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch exclusions:", error);
-    }
-  };
-
-  // 除外リスト企業選択時に取得
-  useEffect(() => {
-    fetchExclusions(exclusionCompanyId);
-  }, [exclusionCompanyId]);
-
-  // 除外リストCSVアップロード
-  const handleExclusionUpload = async () => {
-    if (!exclusionFile || !exclusionCompanyId) {
-      setMessage({ type: "error", text: "企業とファイルを選択してください" });
-      return;
-    }
-
-    setIsUploadingExclusion(true);
-    setMessage(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", exclusionFile);
-      formData.append("companyId", exclusionCompanyId);
-      formData.append("clearExisting", clearExisting.toString());
-
-      const response = await fetch("/api/v2/exclusions", {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setMessage({ type: "success", text: result.message });
-        setExclusionFile(null);
-        const fileInput = document.getElementById("exclusion-file") as HTMLInputElement;
-        if (fileInput) fileInput.value = "";
-        // 除外リストを再取得
-        await fetchExclusions(exclusionCompanyId);
-      } else {
-        setMessage({ type: "error", text: result.error || "アップロードに失敗しました" });
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "アップロードに失敗しました",
-      });
-    } finally {
-      setIsUploadingExclusion(false);
-    }
-  };
-
-  // 除外ルール削除
-  const handleDeleteExclusion = async (exclusionId: string) => {
-    try {
-      const response = await fetch("/api/v2/exclusions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ exclusionId }),
-      });
-      const result = await response.json();
-      if (result.success) {
-        setMessage({ type: "success", text: "除外ルールを削除しました" });
-        await fetchExclusions(exclusionCompanyId);
-      } else {
-        setMessage({ type: "error", text: result.error || "削除に失敗しました" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "削除に失敗しました" });
-    }
-  };
-
-  // アプローチ先リストを取得
-  const fetchInclusions = async (companyId: string) => {
-    if (!companyId) {
-      setInclusions([]);
-      return;
-    }
-    try {
-      const response = await fetch(`/api/v2/inclusions?companyId=${companyId}`);
-      const result = await response.json();
-      if (result.success) {
-        setInclusions(result.data || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch inclusions:", error);
-    }
-  };
-
-  // アプローチ先リスト企業選択時に取得
-  useEffect(() => {
-    fetchInclusions(inclusionCompanyId);
-  }, [inclusionCompanyId]);
-
-  // アプローチ先リストCSVアップロード
-  const handleInclusionUpload = async () => {
-    if (!inclusionFile || !inclusionCompanyId) {
-      setMessage({ type: "error", text: "企業とファイルを選択してください" });
-      return;
-    }
-
-    setIsUploadingInclusion(true);
-    setMessage(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", inclusionFile);
-      formData.append("companyId", inclusionCompanyId);
-      formData.append("clearExisting", clearExistingInclusion.toString());
-
-      const response = await fetch("/api/v2/inclusions", {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setMessage({ type: "success", text: result.message });
-        setInclusionFile(null);
-        const fileInput = document.getElementById("inclusion-file") as HTMLInputElement;
-        if (fileInput) fileInput.value = "";
-        await fetchInclusions(inclusionCompanyId);
-      } else {
-        setMessage({ type: "error", text: result.error || "アップロードに失敗しました" });
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "アップロードに失敗しました",
-      });
-    } finally {
-      setIsUploadingInclusion(false);
-    }
-  };
-
-  // アプローチ先削除
-  const handleDeleteInclusion = async (inclusionId: string) => {
-    try {
-      const response = await fetch("/api/v2/inclusions", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inclusionId }),
-      });
-      const result = await response.json();
-      if (result.success) {
-        setMessage({ type: "success", text: "アプローチ先を削除しました" });
-        await fetchInclusions(inclusionCompanyId);
-      } else {
-        setMessage({ type: "error", text: result.error || "削除に失敗しました" });
-      }
-    } catch (error) {
-      setMessage({ type: "error", text: "削除に失敗しました" });
-    }
-  };
-
-  // トピックアーカイブ実行
-  const handleArchiveTopics = async () => {
-    if (!archiveCompanyId) {
+  // メイン機能: データ取込（コネクタ経由）
+  const handleImport = async () => {
+    if (!selectedCompanyId) {
       setMessage({ type: "error", text: "企業を選択してください" });
       return;
     }
 
-    setIsArchiving(true);
+    setIsImporting(true);
+    setImportResult(null);
     setMessage(null);
-    setArchiveResult(null);
 
     try {
-      const response = await fetch("/api/v2/topics/archive-by-filter", {
+      const response = await fetch("/api/v2/connector/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: archiveCompanyId,
-          dryRun: archiveDryRun,
+          companyId: selectedCompanyId,
+          dryRun: false,
+          limit: 0,
         }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        setArchiveResult({
-          toArchive: result.toArchive,
-          archived: result.archived,
-          dryRun: result.dryRun,
-          details: result.details,
+        setImportResult({
+          totalFetched: result.totalFetched,
+          zeroOrderPassed: result.zeroOrderPassed,
+          importedCount: result.importedCount,
+          aiRankDistribution: result.aiRankDistribution,
         });
         setMessage({
           type: "success",
-          text: result.message,
+          text: `${result.importedCount}件を取り込みました`,
         });
+        // 統計を更新
+        await fetchStats();
       } else {
-        setMessage({ type: "error", text: result.error || "アーカイブに失敗しました" });
+        setMessage({ type: "error", text: result.error || "データ取込に失敗しました" });
       }
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "アーカイブに失敗しました",
+        text: error instanceof Error ? error.message : "データ取込に失敗しました",
       });
     } finally {
-      setIsArchiving(false);
+      setIsImporting(false);
     }
   };
 
-  // サービス一覧を取得
-  useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        const response = await fetch("/api/services");
-        const result = await response.json();
-        if (result.success && result.data) {
-          setServices(result.data.map((s: { id: string; name: string; description: string }) => ({
-            id: s.id,
-            name: s.name,
-            description: s.description || "",
-          })));
-        }
-      } catch (error) {
-        console.error("Failed to fetch services:", error);
-      }
-    };
-
-    fetchServices();
-  }, []);
-
-  // ダッシュボード統計を取得
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch("/api/v2/stats");
-        const result = await response.json();
-        if (result.success) {
-          setStats(result.stats);
-        }
-      } catch (error) {
-        console.error("Failed to fetch stats:", error);
-      }
-    };
-
-    fetchStats();
-  }, []);
-
-  // ヘッダー名のマッピング
-  const headerMapping: Record<string, string> = {
-    企業ID: "company_id",
-    企業id: "company_id",
-    都道府県: "prefecture",
-    市町村: "city",
-    議会日付: "council_date",
-    "議会の日付": "council_date",
-    議題タイトル: "title",
-    タイトル: "title",
-    議題概要: "summary",
-    概要: "summary",
-    質問者: "questioner",
-    回答者: "answerer",
-    ソースURL: "source_url",
-    URL: "source_url",
-    グループID: "group_id",
-    group_id: "group_id",
-    開始秒数: "start_sec",
-    終了秒数: "end_sec",
-    議題ID: "external_id",
-    カテゴリ: "category",
-    立場: "stance",
-  };
-
-  // CSVをパースしてプレビュー
-  const parseCSVForPreview = (text: string) => {
-    const lines = text.split(/\r?\n/).filter((line) => line.trim());
-    if (lines.length < 1) return null;
-
-    // ヘッダー行をパース
-    const headers = parseCSVLine(lines[0]);
-
-    // マッピングを作成
-    const mappedHeaders: Record<string, string> = {};
-    headers.forEach((h) => {
-      const normalized = h.trim();
-      mappedHeaders[normalized] = headerMapping[normalized] || normalized.toLowerCase().replace(/\s+/g, "_");
-    });
-
-    // データ行（最大5行）
-    const rows: string[][] = [];
-    for (let i = 1; i < Math.min(lines.length, 6); i++) {
-      rows.push(parseCSVLine(lines[i]));
-    }
-
-    return { headers, rows, mappedHeaders };
-  };
-
-  // CSV行をパース（クォート対応）
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === "," && !inQuotes) {
-        result.push(current);
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    result.push(current);
-    return result;
-  };
-
-  // ファイル選択
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setMessage(null);
-
-      // CSVをプレビュー用にパース
-      try {
-        const text = await selectedFile.text();
-        const preview = parseCSVForPreview(text);
-        setCsvPreview(preview);
-      } catch {
-        setCsvPreview(null);
-      }
-    }
-  };
-
-  // SRTファイル選択
-  const handleSrtFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setSrtFile(selectedFile);
-      setSrtLinkResult(null);
-      setMessage(null);
-    }
-  };
-
-  // SRT自動紐付け（Google Drive）
-  const handleAutoLink = async () => {
-    if (!autoLinkCompanyId) {
+  // AI再判定
+  const handleRerank = async () => {
+    if (!selectedCompanyId) {
+      setMessage({ type: "error", text: "企業を選択してください" });
       return;
     }
 
-    setIsAutoLinking(true);
-    setAutoLinkResult(null);
+    setIsReranking(true);
+    setRerankResult(null);
 
     try {
-      const response = await fetch("/api/v2/srt/auto-link", {
+      const response = await fetch("/api/v2/topics/rerank", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          companyId: autoLinkCompanyId,
+          companyId: selectedCompanyId,
+          limit: 100,
         }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        setAutoLinkResult({
+        setRerankResult({
+          summary: result.summary,
           processed: result.processed,
-          updated: result.updated,
-          skipped: result.skipped,
-          failed: result.failed,
         });
         setMessage({ type: "success", text: result.message });
+        await fetchStats();
       } else {
-        setMessage({ type: "error", text: result.error || "自動紐付けに失敗しました" });
+        setMessage({ type: "error", text: result.error || "AI再判定に失敗しました" });
       }
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "自動紐付けに失敗しました",
+        text: error instanceof Error ? error.message : "AI再判定に失敗しました",
       });
     } finally {
-      setIsAutoLinking(false);
+      setIsReranking(false);
     }
   };
 
@@ -661,419 +217,62 @@ export default function AdminPage() {
     try {
       const response = await fetch("/api/v2/companies", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          company_name: newCompanyName,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_name: newCompanyName }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        const newId = result.data?.company_id || "";
-        setMessage({ type: "success", text: `企業「${newCompanyName}」を登録しました（ID: ${newId}）` });
+        setMessage({ type: "success", text: `企業「${newCompanyName}」を登録しました` });
         setNewCompanyName("");
-        // 企業一覧を再取得
-        const refreshResponse = await fetch("/api/companies");
-        const refreshResult = await refreshResponse.json();
-        if (refreshResult.success) {
-          setCompanies(refreshResult.data || []);
-        }
+        await fetchAllCompanies();
       } else {
         setMessage({ type: "error", text: result.error || "企業登録に失敗しました" });
       }
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "企業登録に失敗しました",
-      });
+      setMessage({ type: "error", text: "企業登録に失敗しました" });
     } finally {
       setIsCreatingCompany(false);
     }
   };
 
-  // SRT紐付け処理
-  const handleLinkSrt = async () => {
-    if (!srtFile || !srtGroupId) {
-      setMessage({ type: "error", text: "グループIDとSRTファイルを指定してください" });
-      return;
-    }
-
-    setIsParsingSrt(true);
-    setSrtLinkResult(null);
-
+  // 企業の表示/非表示切り替え
+  const toggleCompanyVisibility = async (companyId: string, hide: boolean) => {
     try {
-      const formData = new FormData();
-      formData.append("file", srtFile);
-      formData.append("groupId", srtGroupId);
-
-      const response = await fetch("/api/v2/srt/link", {
-        method: "POST",
-        body: formData,
+      const response = await fetch("/api/v2/companies", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ company_id: companyId, is_hidden: hide }),
       });
-
       const result = await response.json();
-
       if (result.success) {
-        setSrtLinkResult({
-          updatedCount: result.updatedCount,
-          skippedCount: result.skippedCount,
-          topicsFound: result.topicsFound,
-          srtEntries: result.srtEntries,
-        });
         setMessage({ type: "success", text: result.message });
+        await fetchAllCompanies();
       } else {
-        setMessage({ type: "error", text: result.error || "SRTの紐付けに失敗しました" });
+        setMessage({ type: "error", text: result.error || "操作に失敗しました" });
       }
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "SRTの紐付けに失敗しました",
-      });
-    } finally {
-      setIsParsingSrt(false);
+      setMessage({ type: "error", text: "操作に失敗しました" });
     }
   };
 
-  // AI要約生成処理
-  const handleSummarize = async () => {
-    if (!summarizeCompanyId) {
-      return;
-    }
-
-    setIsSummarizing(true);
-    setSummarizeResult(null);
-
-    try {
-      const response = await fetch("/api/v2/topics/summarize", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          companyId: summarizeCompanyId,
-          forceUpdate: false,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setSummarizeResult({
-          processed: result.processed,
-          updated: result.updated,
-          skipped: result.skipped,
-          failed: result.failed,
-        });
-        setMessage({ type: "success", text: result.message });
-      } else {
-        setMessage({ type: "error", text: result.error || "AI要約生成に失敗しました" });
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "AI要約生成に失敗しました",
-      });
-    } finally {
-      setIsSummarizing(false);
-    }
-  };
-
-  // AIランク付け処理
-  const handleRank = async () => {
-    if (!rankCompanyId) {
-      return;
-    }
-
-    setIsRanking(true);
-    setRankResult(null);
-
-    try {
-      const response = await fetch("/api/v2/topics/rank", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          companyId: rankCompanyId,
-          updateDb: true,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setRankResult(result.summary);
-        setMessage({ type: "success", text: result.message });
-      } else {
-        setMessage({ type: "error", text: result.error || "ランク付けに失敗しました" });
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "ランク付けに失敗しました",
-      });
-    } finally {
-      setIsRanking(false);
-    }
-  };
-
-  // AI判定ランク付け処理（統合版）
-  const handleAiRank = async () => {
-    if (!aiRankCompanyId) {
-      return;
-    }
-
-    setIsAiRanking(true);
-    setAiRankResult(null);
-
-    try {
-      // 統合API（サービス情報 + SRTテキスト使用、DB更新あり）
-      // 除外: C判定済み、完了済み、アーカイブ済み
-      const response = await fetch("/api/v2/topics/rerank", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          companyId: aiRankCompanyId,
-          limit: aiRankLimit,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setAiRankResult({
-          summary: result.summary,
-          results: result.results,
-        });
-        setMessage({ type: "success", text: result.message });
-      } else {
-        setMessage({ type: "error", text: result.error || "AI判定に失敗しました" });
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "AI判定に失敗しました",
-      });
-    } finally {
-      setIsAiRanking(false);
-    }
-  };
-
-  // ワンクリック一括処理
-  const handleBatchRun = async () => {
-    if (!batchCompanyId) {
-      setMessage({ type: "error", text: "企業を選択してください" });
-      return;
-    }
-
-    setIsBatchRunning(true);
-    setBatchProgress({ step: "開始", completed: [], errors: [] });
-    setMessage(null);
-
-    const completed: string[] = [];
-    const errors: string[] = [];
-
-    try {
-      // Step 1: SRT自動紐付け
-      setBatchProgress({ step: "SRT紐付け中...", completed, errors });
-      try {
-        const srtRes = await fetch("/api/v2/srt/auto-link", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: batchCompanyId }),
-        });
-        const srtResult = await srtRes.json();
-        if (srtResult.success) {
-          completed.push(`SRT紐付け: ${srtResult.updated}件更新`);
-        } else {
-          errors.push(`SRT紐付け: ${srtResult.error}`);
-        }
-      } catch (e) {
-        errors.push(`SRT紐付け: ${e instanceof Error ? e.message : "不明なエラー"}`);
-      }
-
-      // Step 2: AI要約生成
-      setBatchProgress({ step: "AI要約生成中...", completed: [...completed], errors: [...errors] });
-      try {
-        const sumRes = await fetch("/api/v2/topics/summarize", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: batchCompanyId, forceUpdate: false }),
-        });
-        const sumResult = await sumRes.json();
-        if (sumResult.success) {
-          completed.push(`AI要約: ${sumResult.updated}件生成`);
-        } else {
-          errors.push(`AI要約: ${sumResult.error}`);
-        }
-      } catch (e) {
-        errors.push(`AI要約: ${e instanceof Error ? e.message : "不明なエラー"}`);
-      }
-
-      // Step 3: AIランク付け
-      setBatchProgress({ step: "AIランク付け中...", completed: [...completed], errors: [...errors] });
-      try {
-        const rankRes = await fetch("/api/v2/topics/rank", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: batchCompanyId, updateDb: true }),
-        });
-        const rankResult = await rankRes.json();
-        if (rankResult.success) {
-          const s = rankResult.summary;
-          completed.push(`ランク付け: S${s.S} A${s.A} B${s.B} C${s.C}`);
-        } else {
-          errors.push(`ランク付け: ${rankResult.error}`);
-        }
-      } catch (e) {
-        errors.push(`ランク付け: ${e instanceof Error ? e.message : "不明なエラー"}`);
-      }
-
-      // 完了
-      setBatchProgress({ step: "完了", completed, errors });
-      setMessage({
-        type: errors.length > 0 ? "error" : "success",
-        text: `一括処理完了: ${completed.length}件成功、${errors.length}件エラー`,
-      });
-
-      // 統計を再取得
-      const statsRes = await fetch("/api/v2/stats");
-      const statsResult = await statsRes.json();
-      if (statsResult.success) {
-        setStats(statsResult.stats);
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "一括処理に失敗しました",
-      });
-    } finally {
-      setIsBatchRunning(false);
-    }
-  };
-
-  // コネクタ実行処理
-  const handleConnectorRun = async () => {
-    if (!connectorCompanyId) {
-      setMessage({ type: "error", text: "企業を選択してください" });
-      return;
-    }
-
-    setIsConnectorRunning(true);
-    setConnectorResult(null);
-    setMessage(null);
-
-    try {
-      const response = await fetch("/api/v2/connector/fetch", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          companyId: connectorCompanyId,
-          serviceId: connectorServiceId || undefined,
-          dryRun: connectorDryRun,
-          limit: 0, // B評価以上は全件通過
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setConnectorResult({
-          totalFetched: result.totalFetched,
-          zeroOrderPassed: result.zeroOrderPassed,
-          firstOrderProcessed: result.firstOrderProcessed,
-          importedCount: result.importedCount,
-          fetchInfo: result.fetchInfo,
-          keywordConfig: result.keywordConfig,
-          errors: result.errors,
-        });
-        setMessage({
-          type: "success",
-          text: result.message || `取込完了: ${result.importedCount}件`,
-        });
-      } else {
-        setMessage({
-          type: "error",
-          text: result.error || "データ取込に失敗しました",
-        });
-      }
-    } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "データ取込に失敗しました",
-      });
-    } finally {
-      setIsConnectorRunning(false);
-    }
-  };
-
-  // アップロード処理
-  const handleUpload = async () => {
-    if (!file || !selectedCompanyId) {
+  // 除外リストアップロード
+  const handleExclusionUpload = async () => {
+    if (!exclusionFile || !selectedCompanyId) {
       setMessage({ type: "error", text: "企業とファイルを選択してください" });
       return;
     }
 
-    setIsUploading(true);
-    setMessage(null);
-    setUploadResult(null);
+    setIsUploadingList(true);
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", exclusionFile);
       formData.append("companyId", selectedCompanyId);
+      formData.append("clearExisting", "false");
 
-      // パイプライン使用時は判定付きアップロード
-      if (usePipeline) {
-        if (uploadServiceId) {
-          formData.append("serviceId", uploadServiceId);
-        }
-        formData.append("dryRun", uploadDryRun.toString());
-
-        const response = await fetch("/api/v2/connector/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          setUploadResult({
-            totalFetched: result.totalFetched,
-            zeroOrderPassed: result.zeroOrderPassed,
-            firstOrderProcessed: result.firstOrderProcessed,
-            importedCount: result.importedCount,
-            keywordConfig: result.keywordConfig,
-            errors: result.errors,
-          });
-          setMessage({
-            type: "success",
-            text: result.message || `処理完了`,
-          });
-          if (!uploadDryRun) {
-            setFile(null);
-            setCsvPreview(null);
-            const fileInput = document.getElementById("csv-file") as HTMLInputElement;
-            if (fileInput) fileInput.value = "";
-          }
-        } else {
-          setMessage({
-            type: "error",
-            text: result.error || "判定付きアップロードに失敗しました",
-          });
-        }
-        return;
-      }
-
-      // 従来の単純インポート
-      const response = await fetch("/api/v2/topics/import", {
+      const response = await fetch("/api/v2/exclusions", {
         method: "POST",
         body: formData,
       });
@@ -1082,28 +281,57 @@ export default function AdminPage() {
 
       if (result.success) {
         setMessage({ type: "success", text: result.message });
-        setFile(null);
-        setCsvPreview(null);
-        // ファイル入力をリセット
-        const fileInput = document.getElementById("csv-file") as HTMLInputElement;
-        if (fileInput) fileInput.value = "";
+        setExclusionFile(null);
       } else {
         setMessage({ type: "error", text: result.error || "アップロードに失敗しました" });
       }
     } catch (error) {
-      setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "アップロードに失敗しました",
-      });
+      setMessage({ type: "error", text: "アップロードに失敗しました" });
     } finally {
-      setIsUploading(false);
+      setIsUploadingList(false);
     }
   };
 
+  // アプローチ先リストアップロード
+  const handleInclusionUpload = async () => {
+    if (!inclusionFile || !selectedCompanyId) {
+      setMessage({ type: "error", text: "企業とファイルを選択してください" });
+      return;
+    }
+
+    setIsUploadingList(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", inclusionFile);
+      formData.append("companyId", selectedCompanyId);
+      formData.append("clearExisting", "false");
+
+      const response = await fetch("/api/v2/inclusions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setMessage({ type: "success", text: result.message });
+        setInclusionFile(null);
+      } else {
+        setMessage({ type: "error", text: result.error || "アップロードに失敗しました" });
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: "アップロードに失敗しました" });
+    } finally {
+      setIsUploadingList(false);
+    }
+  };
+
+  // ローディング中
   if (status === "loading") {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <p>読み込み中...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full"></div>
       </div>
     );
   }
@@ -1112,7 +340,7 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-100">
       {/* ヘッダー */}
       <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+        <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-gray-800">管理画面</h1>
             <div className="flex items-center gap-4">
@@ -1120,1577 +348,279 @@ export default function AdminPage() {
                 サービス管理
               </a>
               <a href="/" className="text-blue-600 hover:text-blue-800 text-sm">
-                ← メイン画面に戻る
+                ← メイン画面
               </a>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        {/* ダッシュボード統計セクション */}
-        {stats && (
-          <section className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 mb-8 text-white">
-            <h2 className="text-lg font-bold mb-4">ダッシュボード</h2>
+      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+        {/* メッセージ */}
+        {message && (
+          <div
+            className={`p-4 rounded-lg ${
+              message.type === "success"
+                ? "bg-green-100 text-green-800 border border-green-300"
+                : "bg-red-100 text-red-800 border border-red-300"
+            }`}
+          >
+            {message.text}
+          </div>
+        )}
 
-            {/* メイン統計 */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
-              <div className="bg-white/10 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold">{stats.totalTopics}</div>
-                <div className="text-sm opacity-80">総トピック数</div>
+        {/* ダッシュボード */}
+        {stats && (
+          <section className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 text-white">
+            <h2 className="text-lg font-bold mb-4">ダッシュボード</h2>
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="bg-white/10 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{stats.totalTopics}</div>
+                <div className="text-xs opacity-80">総トピック</div>
               </div>
-              <div className="bg-white/10 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold">{stats.byStatus["未着手"] || 0}</div>
-                <div className="text-sm opacity-80">未着手</div>
+              <div className="bg-white/10 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{stats.byStatus["未着手"] || 0}</div>
+                <div className="text-xs opacity-80">未着手</div>
               </div>
-              <div className="bg-white/10 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold">{stats.byStatus["架電中"] || 0}</div>
-                <div className="text-sm opacity-80">架電中</div>
+              <div className="bg-white/10 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{stats.byStatus["対応中"] || 0}</div>
+                <div className="text-xs opacity-80">対応中</div>
               </div>
-              <div className="bg-white/10 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold">{stats.byStatus["完了"] || 0}</div>
-                <div className="text-sm opacity-80">完了</div>
+              <div className="bg-white/10 rounded-lg p-3 text-center">
+                <div className="text-2xl font-bold">{stats.byStatus["完了"] || 0}</div>
+                <div className="text-xs opacity-80">完了</div>
               </div>
             </div>
-
-            {/* 優先度別・最近のインポート */}
-            <div className="grid grid-cols-2 gap-4">
-              {/* 優先度別 */}
-              <div className="bg-white/10 rounded-lg p-4">
-                <h3 className="text-sm font-medium mb-2 opacity-80">優先度別</h3>
-                <div className="flex gap-3">
-                  <span className="flex items-center gap-1">
-                    <span className="w-3 h-3 rounded-full bg-red-400"></span>
-                    S: {stats.byPriority["S"] || 0}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-3 h-3 rounded-full bg-orange-400"></span>
-                    A: {stats.byPriority["A"] || 0}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-3 h-3 rounded-full bg-yellow-400"></span>
-                    B: {stats.byPriority["B"] || 0}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-3 h-3 rounded-full bg-gray-400"></span>
-                    C: {stats.byPriority["C"] || 0}
-                  </span>
-                </div>
-              </div>
-
-              {/* 最近のインポート */}
-              <div className="bg-white/10 rounded-lg p-4">
-                <h3 className="text-sm font-medium mb-2 opacity-80">最近のインポート</h3>
-                <div className="flex gap-4">
-                  <span>今日: {stats.recentImports.today}</span>
-                  <span>今週: {stats.recentImports.thisWeek}</span>
-                  <span>今月: {stats.recentImports.thisMonth}</span>
-                </div>
-              </div>
+            <div className="flex gap-4 text-sm">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-400"></span>
+                A: {stats.byPriority["A"] || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                B: {stats.byPriority["B"] || 0}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                C: {stats.byPriority["C"] || 0}
+              </span>
             </div>
           </section>
         )}
 
-        {/* ワンクリック一括処理セクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-green-300">
-          <h2 className="text-lg font-bold text-green-800 mb-4">
-            ワンクリック一括処理
-            <span className="ml-2 text-xs font-normal text-green-600 bg-green-100 px-2 py-1 rounded">
-              時短機能
-            </span>
-          </h2>
+        {/* メイン操作パネル */}
+        <section className="bg-white rounded-lg shadow-lg p-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">データ取込</h2>
 
-          <p className="text-sm text-gray-600 mb-4">
-            選択した企業のトピックに対して、SRT紐付け → AI要約生成 → ランク付けを一括実行します。
-          </p>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={batchCompanyId}
-                onChange={(e) => setBatchCompanyId(e.target.value)}
-                className="w-full border border-green-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 実行ボタン */}
-            <button
-              onClick={handleBatchRun}
-              disabled={isBatchRunning || !batchCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isBatchRunning || !batchCompanyId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-700"
-              }`}
-            >
-              {isBatchRunning ? "処理中..." : "一括処理を実行"}
-            </button>
-
-            {/* 進捗表示 */}
-            {batchProgress && (
-              <div className="p-4 bg-green-50 rounded-lg">
-                <div className="flex items-center gap-2 mb-3">
-                  {isBatchRunning && (
-                    <div className="animate-spin h-4 w-4 border-2 border-green-600 border-t-transparent rounded-full"></div>
-                  )}
-                  <span className="font-medium text-green-800">{batchProgress.step}</span>
-                </div>
-
-                {batchProgress.completed.length > 0 && (
-                  <div className="mb-2">
-                    <p className="text-xs font-medium text-green-700 mb-1">完了:</p>
-                    <ul className="text-xs text-green-600 space-y-1">
-                      {batchProgress.completed.map((item, i) => (
-                        <li key={i} className="flex items-center gap-1">
-                          <span className="text-green-500">✓</span> {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {batchProgress.errors.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-red-700 mb-1">エラー:</p>
-                    <ul className="text-xs text-red-600 space-y-1">
-                      {batchProgress.errors.map((item, i) => (
-                        <li key={i} className="flex items-center gap-1">
-                          <span className="text-red-500">✗</span> {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 説明 */}
-          <div className="mt-6 p-4 bg-green-50 rounded-lg">
-            <h3 className="text-sm font-medium text-green-800 mb-2">
-              一括処理の内容
-            </h3>
-            <ol className="text-xs text-green-700 space-y-1 list-decimal list-inside">
-              <li><strong>SRT紐付け:</strong> Google Driveから字幕を取得してトピックに紐付け</li>
-              <li><strong>AI要約生成:</strong> 抽出テキストからGPTで要約を自動生成</li>
-              <li><strong>AIランク付け:</strong> ゴールデンルールでS/A/B/Cを自動判定</li>
-            </ol>
-            <p className="text-xs text-green-600 mt-2">
-              ※ 各処理は既に完了済みの項目はスキップされます
-            </p>
-          </div>
-        </section>
-
-        {/* 企業新規登録セクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            企業新規登録
-          </h2>
-
-          <div className="space-y-4">
-            {/* 企業名 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業名 *
-              </label>
-              <input
-                type="text"
-                value={newCompanyName}
-                onChange={(e) => setNewCompanyName(e.target.value)}
-                placeholder="例: 株式会社サンプル"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                企業IDは自動で採番されます（C001, C002, ...）
-              </p>
-            </div>
-
-            {/* 登録ボタン */}
-            <button
-              onClick={handleCreateCompany}
-              disabled={isCreatingCompany || !newCompanyName}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isCreatingCompany || !newCompanyName
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            >
-              {isCreatingCompany ? "登録中..." : "企業を登録"}
-            </button>
-
-            {/* 登録済み企業一覧 */}
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">登録済み企業 ({companies.length}件)</h3>
-              <div className="flex flex-wrap gap-2">
-                {companies.map((company) => (
-                  <span
-                    key={company.companyId}
-                    className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-600"
-                  >
-                    {company.companyId}: {company.companyName}
-                    <button
-                      onClick={() => toggleCompanyVisibility(company.companyId, true)}
-                      className="ml-1 text-gray-400 hover:text-red-500"
-                      title="非表示にする"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* 非表示企業一覧 */}
-            {hiddenCompanies.length > 0 && (
-              <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-red-700">
-                    非表示企業 ({hiddenCompanies.length}件)
-                  </h3>
-                  <button
-                    onClick={() => setShowHiddenCompanies(!showHiddenCompanies)}
-                    className="text-xs text-red-600 hover:text-red-800"
-                  >
-                    {showHiddenCompanies ? "隠す" : "表示"}
-                  </button>
-                </div>
-                {showHiddenCompanies && (
-                  <div className="flex flex-wrap gap-2">
-                    {hiddenCompanies.map((company) => (
-                      <span
-                        key={company.companyId}
-                        className="inline-flex items-center gap-1 bg-white border border-red-200 rounded px-2 py-1 text-xs text-red-600"
-                      >
-                        {company.companyId}: {company.companyName}
-                        <button
-                          onClick={() => toggleCompanyVisibility(company.companyId, false)}
-                          className="ml-1 text-red-400 hover:text-green-600"
-                          title="表示に戻す"
-                        >
-                          ↺
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* 除外リスト管理セクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            除外リスト管理
-            <span className="ml-2 text-xs font-normal text-gray-500">
-              契約済み・NG自治体
-            </span>
-          </h2>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={exclusionCompanyId}
-                onChange={(e) => setExclusionCompanyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* CSVアップロード */}
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                除外リストCSV
-              </label>
-              <input
-                id="exclusion-file"
-                type="file"
-                accept=".csv"
-                onChange={(e) => setExclusionFile(e.target.files?.[0] || null)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                形式: 都道府県, 市区町村, 理由（ヘッダー行任意）
-              </p>
-
-              {/* 既存データ削除オプション */}
-              <label className="flex items-center mt-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={clearExisting}
-                  onChange={(e) => setClearExisting(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <span className="ml-2 text-xs text-gray-600">
-                  既存の除外リストを削除してから登録
-                </span>
-              </label>
-
-              {/* アップロードボタン */}
-              <button
-                onClick={handleExclusionUpload}
-                disabled={isUploadingExclusion || !exclusionFile || !exclusionCompanyId}
-                className={`mt-3 w-full py-2 rounded-lg font-medium text-white ${
-                  isUploadingExclusion || !exclusionFile || !exclusionCompanyId
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                }`}
-              >
-                {isUploadingExclusion ? "アップロード中..." : "除外リストをアップロード"}
-              </button>
-            </div>
-
-            {/* 現在の除外リスト */}
-            {exclusionCompanyId && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  現在の除外リスト ({exclusions.length}件)
-                </h3>
-                {exclusions.length === 0 ? (
-                  <p className="text-xs text-gray-500">除外リストが登録されていません</p>
-                ) : (
-                  <div className="max-h-60 overflow-y-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-200 sticky top-0">
-                        <tr>
-                          <th className="px-2 py-1 text-left">都道府県</th>
-                          <th className="px-2 py-1 text-left">市区町村</th>
-                          <th className="px-2 py-1 text-left">理由</th>
-                          <th className="px-2 py-1 text-center w-12">削除</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {exclusions.map((ex) => (
-                          <tr key={ex.id} className="border-b border-gray-200">
-                            <td className="px-2 py-1">{ex.prefecture || "-"}</td>
-                            <td className="px-2 py-1">{ex.city || "-"}</td>
-                            <td className="px-2 py-1 text-gray-500">{ex.reason || "-"}</td>
-                            <td className="px-2 py-1 text-center">
-                              <button
-                                onClick={() => handleDeleteExclusion(ex.id)}
-                                className="text-red-500 hover:text-red-700"
-                                title="削除"
-                              >
-                                ×
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 説明 */}
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <h4 className="text-xs font-medium text-blue-800 mb-1">除外リストの使い方</h4>
-              <ul className="text-xs text-blue-700 space-y-1 list-disc list-inside">
-                <li>パイプライン実行時に、登録済みの自治体は自動的に除外されます</li>
-                <li>都道府県のみ指定: その県全体を除外</li>
-                <li>都道府県+市区町村: 特定の自治体のみ除外</li>
-                <li>市区町村のみ: 全国でその市区町村名を除外</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* アプローチ先リスト管理セクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            アプローチ先リスト管理
-            <span className="ml-2 text-xs font-normal text-green-600">
-              ホワイトリスト
-            </span>
-          </h2>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={inclusionCompanyId}
-                onChange={(e) => setInclusionCompanyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* CSVアップロード */}
-            <div className="p-4 bg-green-50 rounded-lg">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                アプローチ先CSV
-              </label>
-              <input
-                id="inclusion-file"
-                type="file"
-                accept=".csv"
-                onChange={(e) => setInclusionFile(e.target.files?.[0] || null)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                形式: 都道府県, 市区町村, メモ（ヘッダー行任意）
-              </p>
-
-              {/* 既存データ削除オプション */}
-              <label className="flex items-center mt-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={clearExistingInclusion}
-                  onChange={(e) => setClearExistingInclusion(e.target.checked)}
-                  className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                />
-                <span className="ml-2 text-xs text-gray-600">
-                  既存のアプローチ先リストを削除してから登録
-                </span>
-              </label>
-
-              {/* アップロードボタン */}
-              <button
-                onClick={handleInclusionUpload}
-                disabled={isUploadingInclusion || !inclusionFile || !inclusionCompanyId}
-                className={`mt-3 w-full py-2 rounded-lg font-medium text-white ${
-                  isUploadingInclusion || !inclusionFile || !inclusionCompanyId
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-green-600 hover:bg-green-700"
-                }`}
-              >
-                {isUploadingInclusion ? "アップロード中..." : "アプローチ先をアップロード"}
-              </button>
-            </div>
-
-            {/* 現在のアプローチ先リスト */}
-            {inclusionCompanyId && (
-              <div className="p-4 bg-green-50 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  現在のアプローチ先 ({inclusions.length}件)
-                </h3>
-                {inclusions.length === 0 ? (
-                  <p className="text-xs text-gray-500">アプローチ先が登録されていません（全自治体が対象）</p>
-                ) : (
-                  <div className="max-h-60 overflow-y-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-green-200 sticky top-0">
-                        <tr>
-                          <th className="px-2 py-1 text-left">都道府県</th>
-                          <th className="px-2 py-1 text-left">市区町村</th>
-                          <th className="px-2 py-1 text-left">メモ</th>
-                          <th className="px-2 py-1 text-center w-12">削除</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {inclusions.map((inc) => (
-                          <tr key={inc.id} className="border-b border-green-200">
-                            <td className="px-2 py-1">{inc.prefecture || "-"}</td>
-                            <td className="px-2 py-1">{inc.city || "-"}</td>
-                            <td className="px-2 py-1 text-gray-500">{inc.memo || "-"}</td>
-                            <td className="px-2 py-1 text-center">
-                              <button
-                                onClick={() => handleDeleteInclusion(inc.id)}
-                                className="text-red-500 hover:text-red-700"
-                                title="削除"
-                              >
-                                ×
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 説明 */}
-            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-              <h4 className="text-xs font-medium text-green-800 mb-1">アプローチ先リストの使い方</h4>
-              <ul className="text-xs text-green-700 space-y-1 list-disc list-inside">
-                <li>登録すると、<strong>リスト内の自治体のみ</strong>がパイプラインを通過します</li>
-                <li>未登録の場合は全自治体が対象になります</li>
-                <li>除外リストと併用可能（アプローチ先フィルタ後に除外フィルタ適用）</li>
-              </ul>
-            </div>
-          </div>
-        </section>
-
-        {/* 既存トピックアーカイブセクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-orange-300">
-          <h2 className="text-lg font-bold text-orange-800 mb-4">
-            既存トピックのアーカイブ
-            <span className="ml-2 text-xs font-normal text-orange-600">
-              リスト外を非表示化
-            </span>
-          </h2>
-
-          <p className="text-sm text-gray-600 mb-4">
-            除外リスト・アプローチ先リストに基づいて、既存のトピックをアーカイブ（非表示）します。
-          </p>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={archiveCompanyId}
-                onChange={(e) => {
-                  setArchiveCompanyId(e.target.value);
-                  setArchiveResult(null);
-                }}
-                className="w-full border border-orange-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* ドライラン設定 */}
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={archiveDryRun}
-                onChange={(e) => setArchiveDryRun(e.target.checked)}
-                className="w-4 h-4 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-              />
-              <span className="ml-2 text-sm text-gray-600">
-                ドライラン（実際にはアーカイブせず対象を確認）
-              </span>
+          {/* Step 1: 企業選択 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              1. 企業を選択
             </label>
-
-            {/* 実行ボタン */}
-            <button
-              onClick={handleArchiveTopics}
-              disabled={isArchiving || !archiveCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isArchiving || !archiveCompanyId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : archiveDryRun
-                  ? "bg-orange-500 hover:bg-orange-600"
-                  : "bg-red-600 hover:bg-red-700"
-              }`}
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {isArchiving
-                ? "処理中..."
-                : archiveDryRun
-                ? "対象を確認（ドライラン）"
-                : "アーカイブを実行"}
-            </button>
-
-            {/* 結果表示 */}
-            {archiveResult && (
-              <div className={`p-4 rounded-lg ${archiveResult.dryRun ? "bg-orange-50" : "bg-red-50"}`}>
-                <h3 className="font-medium text-gray-800 mb-2">
-                  {archiveResult.dryRun ? "アーカイブ対象（ドライラン）" : "アーカイブ完了"}
-                </h3>
-                <div className="text-sm mb-2">
-                  <span className="font-medium">{archiveResult.toArchive}件</span>がアーカイブ対象
-                  {!archiveResult.dryRun && (
-                    <span className="ml-2 text-green-600">
-                      → {archiveResult.archived}件をアーカイブ済み
-                    </span>
-                  )}
-                </div>
-
-                {archiveResult.details && archiveResult.details.length > 0 && (
-                  <div className="max-h-40 overflow-y-auto mt-2">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-200 sticky top-0">
-                        <tr>
-                          <th className="px-2 py-1 text-left">都道府県</th>
-                          <th className="px-2 py-1 text-left">市区町村</th>
-                          <th className="px-2 py-1 text-left">理由</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {archiveResult.details.map((detail, i) => (
-                          <tr key={i} className="border-b border-gray-200">
-                            <td className="px-2 py-1">{detail.prefecture || "-"}</td>
-                            <td className="px-2 py-1">{detail.city || "-"}</td>
-                            <td className="px-2 py-1 text-gray-500">{detail.reason}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 注意書き */}
-            <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-              <h4 className="text-xs font-medium text-yellow-800 mb-1">注意</h4>
-              <ul className="text-xs text-yellow-700 space-y-1 list-disc list-inside">
-                <li>アーカイブされたトピックはメイン画面に表示されなくなります</li>
-                <li>データは削除されません（復元可能）</li>
-                <li>まずドライランで対象を確認してから実行してください</li>
-              </ul>
-            </div>
+              <option value="">-- 企業を選択 --</option>
+              {companies.map((company) => (
+                <option key={company.companyId} value={company.companyId}>
+                  {company.companyId} - {company.companyName}
+                </option>
+              ))}
+            </select>
           </div>
-        </section>
 
-        {/* CSVアップロードセクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            トピックCSVアップロード
-          </h2>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={selectedCompanyId}
-                onChange={(e) => setSelectedCompanyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* ファイル選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                CSVファイル *
-              </label>
-              <input
-                id="csv-file"
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {file && (
-                <p className="text-sm text-gray-500 mt-1">
-                  選択中: {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                </p>
-              )}
-            </div>
-
-            {/* 判定パイプライン設定 */}
-            <div className="p-4 bg-teal-50 rounded-lg border border-teal-200">
-              <div className="flex items-center gap-3 mb-3">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={usePipeline}
-                    onChange={(e) => setUsePipeline(e.target.checked)}
-                    className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                  />
-                  <span className="ml-2 text-sm font-medium text-teal-800">
-                    0次・1次判定を実行（推奨）
-                  </span>
-                </label>
-              </div>
-
-              {usePipeline && (
-                <div className="space-y-3 pl-6">
-                  {/* サービス選択 */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      サービス（AIキーワード生成用）
-                    </label>
-                    <select
-                      value={uploadServiceId}
-                      onChange={(e) => setUploadServiceId(e.target.value)}
-                      className="w-full border border-teal-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500"
-                    >
-                      <option value="">-- 汎用検索（サービス未指定）--</option>
-                      {services.map((service) => (
-                        <option key={service.id} value={service.id}>
-                          {service.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* ドライラン */}
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={uploadDryRun}
-                      onChange={(e) => setUploadDryRun(e.target.checked)}
-                      className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                    />
-                    <span className="ml-2 text-xs text-gray-600">
-                      ドライラン（DB投入せず結果のみ確認）
-                    </span>
-                  </label>
-                </div>
-              )}
-            </div>
-
-            {/* CSVプレビュー */}
-            {csvPreview && (
-              <div className="border border-blue-200 rounded-lg overflow-hidden">
-                <div className="bg-blue-50 px-3 py-2 border-b border-blue-200">
-                  <h4 className="text-sm font-medium text-blue-800">
-                    CSVプレビュー（先頭5行）
-                  </h4>
-                </div>
-
-                {/* カラムマッピング */}
-                <div className="px-3 py-2 bg-blue-50/50 border-b border-blue-100">
-                  <p className="text-xs text-blue-700 mb-1">カラムマッピング:</p>
-                  <div className="flex flex-wrap gap-1">
-                    {csvPreview.headers.map((h, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center text-xs bg-white border border-blue-200 rounded px-2 py-0.5"
-                      >
-                        <span className="text-gray-600">{h}</span>
-                        <span className="mx-1 text-gray-400">→</span>
-                        <span className="text-blue-600 font-medium">
-                          {csvPreview.mappedHeaders[h]}
-                        </span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* データプレビュー */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        {csvPreview.headers.map((h, i) => (
-                          <th key={i} className="px-2 py-1 text-left text-gray-700 border-b">
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {csvPreview.rows.map((row, rowIdx) => (
-                        <tr key={rowIdx} className="border-b border-gray-100">
-                          {row.map((cell, cellIdx) => (
-                            <td key={cellIdx} className="px-2 py-1 text-gray-800 max-w-[200px] truncate">
-                              {cell || <span className="text-gray-400">-</span>}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* メッセージ */}
-            {message && (
-              <div
-                className={`p-3 rounded-lg ${
-                  message.type === "success"
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {message.text}
-              </div>
-            )}
-
-            {/* アップロードボタン */}
+          {/* Step 2: 実行ボタン */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              2. データを取り込む
+            </label>
             <button
-              onClick={handleUpload}
-              disabled={isUploading || !file || !selectedCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isUploading || !file || !selectedCompanyId
+              onClick={handleImport}
+              disabled={isImporting || !selectedCompanyId}
+              className={`w-full py-4 rounded-lg font-bold text-lg text-white transition ${
+                isImporting || !selectedCompanyId
                   ? "bg-gray-400 cursor-not-allowed"
-                  : usePipeline
-                  ? uploadDryRun
-                    ? "bg-teal-500 hover:bg-teal-600"
-                    : "bg-teal-700 hover:bg-teal-800"
                   : "bg-blue-600 hover:bg-blue-700"
               }`}
             >
-              {isUploading
-                ? "処理中..."
-                : usePipeline
-                ? uploadDryRun
-                  ? "判定実行（ドライラン）"
-                  : "判定実行 → DB投入"
-                : "アップロード（判定なし）"}
-            </button>
-
-            {/* 判定結果表示 */}
-            {uploadResult && usePipeline && (
-              <div className="space-y-3">
-                <div className="p-4 bg-teal-50 rounded-lg">
-                  <h3 className="font-medium text-teal-800 mb-2">
-                    判定パイプライン結果
-                    {uploadDryRun && (
-                      <span className="ml-2 text-xs text-teal-600">(ドライラン)</span>
-                    )}
-                  </h3>
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-blue-600">
-                        {uploadResult.totalFetched}
-                      </div>
-                      <div className="text-xs text-blue-600">CSV行数</div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-green-600">
-                        {uploadResult.zeroOrderPassed}
-                      </div>
-                      <div className="text-xs text-green-600">0次通過</div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-purple-600">
-                        {uploadResult.firstOrderProcessed}
-                      </div>
-                      <div className="text-xs text-purple-600">1次処理</div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-teal-600">
-                        {uploadResult.importedCount}
-                      </div>
-                      <div className="text-xs text-teal-600">DB投入</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* キーワード情報 */}
-                {uploadResult.keywordConfig && (
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <div className="text-xs text-blue-700">
-                      <strong>サービス:</strong> {uploadResult.keywordConfig.serviceName}
-                      <span className="mx-2">|</span>
-                      <strong>必須KW:</strong> {uploadResult.keywordConfig.mustCount}件
-                      <span className="mx-2">|</span>
-                      <strong>推奨KW:</strong> {uploadResult.keywordConfig.shouldCount}件
-                    </div>
-                    {uploadResult.keywordConfig.mustKeywords && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {uploadResult.keywordConfig.mustKeywords.slice(0, 5).map((kw, i) => (
-                          <span
-                            key={i}
-                            className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded"
-                          >
-                            {kw}
-                          </span>
-                        ))}
-                        {uploadResult.keywordConfig.mustKeywords.length > 5 && (
-                          <span className="text-xs text-blue-500">
-                            +{uploadResult.keywordConfig.mustKeywords.length - 5}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* エラー表示 */}
-                {uploadResult.errors && uploadResult.errors.length > 0 && (
-                  <div className="p-3 bg-red-50 rounded-lg">
-                    <div className="text-xs text-red-700">
-                      <strong>エラー:</strong>
-                      <ul className="mt-1 list-disc list-inside">
-                        {uploadResult.errors.map((err, i) => (
-                          <li key={i}>{err}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* CSV形式の説明 */}
-          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">
-              CSVファイル形式
-            </h3>
-            <p className="text-xs text-gray-600 mb-2">
-              以下の列名に対応しています（日本語・英語どちらでも可）:
-            </p>
-            <code className="text-xs bg-gray-200 px-2 py-1 rounded block overflow-x-auto">
-              都道府県, 市町村, 議会日付, 議題タイトル, 議題概要, 質問者, 回答者, ソースURL, group_id
-            </code>
-          </div>
-        </section>
-
-        {/* コネクタ（データ自動取込）セクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8 border-2 border-teal-300">
-          <h2 className="text-lg font-bold text-teal-800 mb-4">
-            データ自動取込（Aコネクタ）
-            <span className="ml-2 text-xs font-normal text-teal-600 bg-teal-100 px-2 py-1 rounded">
-              JS-NEXT連携
-            </span>
-          </h2>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={connectorCompanyId}
-                onChange={(e) => setConnectorCompanyId(e.target.value)}
-                className="w-full border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* サービス選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                サービスを選択（AIキーワード生成に使用）
-              </label>
-              <select
-                value={connectorServiceId}
-                onChange={(e) => setConnectorServiceId(e.target.value)}
-                className="w-full border border-teal-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              >
-                <option value="">-- 汎用検索（サービス未指定）--</option>
-                {services.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                サービスを選択すると、AIがサービスに適したキーワードを自動生成します
-              </p>
-            </div>
-
-            {/* ドライラン切り替え */}
-            <div className="flex items-center gap-3">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={connectorDryRun}
-                  onChange={(e) => setConnectorDryRun(e.target.checked)}
-                  className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">
-                  ドライラン（DB投入せず結果のみ確認）
+              {isImporting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+                  取込中...
                 </span>
-              </label>
-            </div>
-
-            {/* 実行ボタン */}
-            <button
-              onClick={handleConnectorRun}
-              disabled={isConnectorRunning || !connectorCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isConnectorRunning || !connectorCompanyId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : connectorDryRun
-                  ? "bg-teal-500 hover:bg-teal-600"
-                  : "bg-teal-700 hover:bg-teal-800"
-              }`}
-            >
-              {isConnectorRunning
-                ? "取込中..."
-                : connectorDryRun
-                ? "ドライラン実行（確認のみ）"
-                : "本番実行（DBに投入）"}
+              ) : (
+                "新規データを取込"
+              )}
             </button>
-
-            {/* 結果表示 */}
-            {connectorResult && (
-              <div className="space-y-3">
-                {/* パイプライン結果 */}
-                <div className="p-4 bg-teal-50 rounded-lg">
-                  <h3 className="font-medium text-teal-800 mb-2">
-                    パイプライン結果
-                    {connectorDryRun && (
-                      <span className="ml-2 text-xs text-teal-600">(ドライラン)</span>
-                    )}
-                  </h3>
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-blue-600">
-                        {connectorResult.totalFetched}
-                      </div>
-                      <div className="text-xs text-blue-600">取得</div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-green-600">
-                        {connectorResult.zeroOrderPassed}
-                      </div>
-                      <div className="text-xs text-green-600">0次通過</div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-purple-600">
-                        {connectorResult.firstOrderProcessed}
-                      </div>
-                      <div className="text-xs text-purple-600">1次処理</div>
-                    </div>
-                    <div className="bg-white p-2 rounded border border-teal-200">
-                      <div className="text-xl font-bold text-teal-600">
-                        {connectorResult.importedCount}
-                      </div>
-                      <div className="text-xs text-teal-600">DB投入</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 取得情報 */}
-                {connectorResult.fetchInfo && (
-                  <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
-                    <div className="flex flex-wrap gap-3">
-                      <span>
-                        <strong>取得方式:</strong>{" "}
-                        {connectorResult.fetchInfo.isInitial ? "初回（4ヶ月分）" : "差分"}
-                      </span>
-                      <span>
-                        <strong>期間:</strong>{" "}
-                        {connectorResult.fetchInfo.dateRange.start} 〜{" "}
-                        {connectorResult.fetchInfo.dateRange.end}
-                      </span>
-                      {connectorResult.fetchInfo.previousFetch && (
-                        <span>
-                          <strong>前回取得:</strong>{" "}
-                          {connectorResult.fetchInfo.previousFetch}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* キーワード情報 */}
-                {connectorResult.keywordConfig && (
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <div className="text-xs text-blue-700">
-                      <strong>サービス:</strong> {connectorResult.keywordConfig.serviceName}
-                      <span className="mx-2">|</span>
-                      <strong>必須KW:</strong> {connectorResult.keywordConfig.mustCount}件
-                      <span className="mx-2">|</span>
-                      <strong>推奨KW:</strong> {connectorResult.keywordConfig.shouldCount}件
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {connectorResult.keywordConfig.mustKeywords.slice(0, 5).map((kw, i) => (
-                        <span
-                          key={i}
-                          className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded"
-                        >
-                          {kw}
-                        </span>
-                      ))}
-                      {connectorResult.keywordConfig.mustKeywords.length > 5 && (
-                        <span className="text-xs text-blue-500">
-                          +{connectorResult.keywordConfig.mustKeywords.length - 5}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* エラー表示 */}
-                {connectorResult.errors && connectorResult.errors.length > 0 && (
-                  <div className="p-3 bg-red-50 rounded-lg">
-                    <div className="text-xs text-red-700">
-                      <strong>エラー:</strong>
-                      <ul className="mt-1 list-disc list-inside">
-                        {connectorResult.errors.map((err, i) => (
-                          <li key={i}>{err}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 説明 */}
-          <div className="mt-6 p-4 bg-teal-50 rounded-lg">
-            <h3 className="text-sm font-medium text-teal-800 mb-2">
-              データ取込パイプライン
-            </h3>
-            <ol className="text-xs text-teal-700 space-y-1 list-decimal list-inside">
-              <li><strong>AIキーワード生成:</strong> サービス情報からGPTが検索キーワードを自動生成</li>
-              <li><strong>JS-NEXTフェッチ:</strong> 議会映像データベースから関連データを取得</li>
-              <li><strong>0次判定:</strong> キーワードスコアリングでB評価以上をフィルタ</li>
-              <li><strong>1次判定:</strong> 字幕から根拠スニペットを抽出（上位100件）</li>
-              <li><strong>DB投入:</strong> 重複排除してトピックテーブルに保存</li>
-            </ol>
-            <p className="text-xs text-teal-600 mt-2">
-              ※ 初回は直近4ヶ月分、2回目以降は差分のみ取得します
+            <p className="text-xs text-gray-500 mt-2">
+              自動で: フィルタリング → SRT取得 → AI判定 → DB保存
             </p>
           </div>
-        </section>
 
-        {/* AI判定セクション（統合版） */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            AI自動ランク付け
-          </h2>
-          <p className="text-sm text-gray-600 mb-4">
-            サービス情報と字幕テキストを使用してAI判定を行います。
-          </p>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={aiRankCompanyId}
-                onChange={(e) => setAiRankCompanyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 件数制限 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                処理件数
-              </label>
-              <select
-                value={aiRankLimit}
-                onChange={(e) => setAiRankLimit(Number(e.target.value))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value={10}>10件</option>
-                <option value={20}>20件</option>
-                <option value={50}>50件</option>
-                <option value={100}>100件</option>
-              </select>
-            </div>
-
-            {/* AI判定ボタン */}
-            <button
-              onClick={handleAiRank}
-              disabled={isAiRanking || !aiRankCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isAiRanking || !aiRankCompanyId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-              }`}
-            >
-              {isAiRanking ? "AI判定中..." : "AI判定実行"}
-            </button>
-
-            {/* AI判定結果表示 */}
-            {aiRankResult && (
-              <div className="space-y-4">
-                {/* CSVエクスポートボタン */}
-                <button
-                  onClick={() => {
-                    const csvHeader = "トピックID,タイトル,AIランク,スコア,判定理由\n";
-                    const csvRows = aiRankResult.results.map(item =>
-                      `"${item.topicId}","${(item.title || "").replace(/"/g, '""')}","${item.rank}","${item.score}","${(item.reasoning || "").replace(/"/g, '""')}"`
-                    ).join("\n");
-                    const csvContent = csvHeader + csvRows;
-                    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement("a");
-                    link.href = url;
-                    link.download = `ai_ranking_${aiRankCompanyId}_${new Date().toISOString().slice(0,10)}.csv`;
-                    link.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="w-full py-2 rounded-lg font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 border border-blue-300"
-                >
-                  判定結果をCSVダウンロード
-                </button>
-
-                {/* サマリー */}
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h3 className="font-medium text-gray-800 mb-2">AI判定結果</h3>
-                  <div className="grid grid-cols-4 gap-2 text-center">
-                    <div className="bg-red-100 p-2 rounded">
-                      <div className="text-2xl font-bold text-red-600">{aiRankResult.summary.S}</div>
-                      <div className="text-xs text-red-600">Sランク</div>
-                    </div>
-                    <div className="bg-orange-100 p-2 rounded">
-                      <div className="text-2xl font-bold text-orange-600">{aiRankResult.summary.A}</div>
-                      <div className="text-xs text-orange-600">Aランク</div>
-                    </div>
-                    <div className="bg-yellow-100 p-2 rounded">
-                      <div className="text-2xl font-bold text-yellow-600">{aiRankResult.summary.B}</div>
-                      <div className="text-xs text-yellow-600">Bランク</div>
-                    </div>
-                    <div className="bg-gray-200 p-2 rounded">
-                      <div className="text-2xl font-bold text-gray-600">{aiRankResult.summary.C}</div>
-                      <div className="text-xs text-gray-600">Cランク</div>
-                    </div>
-                  </div>
+          {/* 取込結果 */}
+          {importResult && (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h3 className="font-medium text-blue-800 mb-2">取込結果</h3>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div>
+                  <span className="text-gray-600">取得: </span>
+                  <span className="font-medium">{importResult.totalFetched}件</span>
                 </div>
-
-                {/* 詳細結果 */}
-                <div className="p-4 bg-gray-50 rounded-lg max-h-96 overflow-y-auto">
-                  <h3 className="font-medium text-gray-800 mb-2">判定詳細（AIの理由付き）</h3>
-                  <div className="space-y-3">
-                    {aiRankResult.results.map((item, index) => (
-                      <div key={index} className="p-3 bg-white rounded border border-gray-200">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                            item.rank === "S" ? "bg-red-100 text-red-700" :
-                            item.rank === "A" ? "bg-orange-100 text-orange-700" :
-                            item.rank === "B" ? "bg-yellow-100 text-yellow-700" :
-                            "bg-gray-100 text-gray-700"
-                          }`}>
-                            {item.rank}ランク（{item.score}点）
-                          </span>
-                        </div>
-                        <p className="text-sm font-medium text-gray-800 mb-1">{item.title}</p>
-                        <p className="text-xs text-gray-600">{item.reasoning}</p>
-                      </div>
-                    ))}
-                  </div>
+                <div>
+                  <span className="text-gray-600">通過: </span>
+                  <span className="font-medium">{importResult.zeroOrderPassed}件</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">保存: </span>
+                  <span className="font-medium text-blue-600">{importResult.importedCount}件</span>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* 説明 */}
-          <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-800 mb-2">
-              AI判定の仕組み
-            </h3>
-            <ul className="text-xs text-gray-700 space-y-1 list-disc list-inside">
-              <li>登録済みサービス情報との関連性を重視</li>
-              <li>字幕テキスト（SRT）の内容を分析</li>
-              <li>時期・予算・具体性などを総合判定</li>
-              <li>S/Aランク → priority: A, B → B, C → C</li>
-            </ul>
-          </div>
-        </section>
-
-        {/* AI要約生成セクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            AI要約生成（抽出テキスト分析）
-          </h2>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={summarizeCompanyId}
-                onChange={(e) => setSummarizeCompanyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* AI要約生成ボタン */}
-            <button
-              onClick={handleSummarize}
-              disabled={isSummarizing || !summarizeCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isSummarizing || !summarizeCompanyId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-indigo-600 hover:bg-indigo-700"
-              }`}
-            >
-              {isSummarizing ? "AI要約生成中..." : "AI要約を生成"}
-            </button>
-
-            {/* 結果表示 */}
-            {summarizeResult && (
-              <div className="p-4 bg-indigo-50 rounded-lg">
-                <h3 className="font-medium text-indigo-800 mb-2">AI要約生成結果</h3>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-white p-2 rounded border border-indigo-200">
-                    <div className="text-xl font-bold text-green-600">{summarizeResult.updated}</div>
-                    <div className="text-xs text-green-600">生成成功</div>
-                  </div>
-                  <div className="bg-white p-2 rounded border border-indigo-200">
-                    <div className="text-xl font-bold text-gray-600">{summarizeResult.skipped}</div>
-                    <div className="text-xs text-gray-600">スキップ</div>
-                  </div>
-                  <div className="bg-white p-2 rounded border border-indigo-200">
-                    <div className="text-xl font-bold text-red-600">{summarizeResult.failed}</div>
-                    <div className="text-xs text-red-600">失敗</div>
-                  </div>
+              {importResult.aiRankDistribution && (
+                <div className="mt-2 flex gap-3 text-sm">
+                  <span className="text-red-600">A: {importResult.aiRankDistribution.A}</span>
+                  <span className="text-yellow-600">B: {importResult.aiRankDistribution.B}</span>
+                  <span className="text-gray-600">C: {importResult.aiRankDistribution.C}</span>
                 </div>
-                <p className="text-xs text-indigo-700 mt-2 text-center">
-                  {summarizeResult.processed}件のトピックを処理
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* 説明 */}
-          <div className="mt-6 p-4 bg-indigo-50 rounded-lg">
-            <h3 className="text-sm font-medium text-indigo-800 mb-2">
-              AI要約の内容
-            </h3>
-            <ul className="text-xs text-indigo-700 space-y-1 list-disc list-inside">
-              <li><strong>質問要点:</strong> 質問者が何を問題視し、何を求めているか</li>
-              <li><strong>回答要点:</strong> 行政側がどう回答したか、具体的な取り組み</li>
-              <li><strong>キーワード:</strong> 予算、時期、システム、DXなどの重要語</li>
-              <li><strong>営業ポイント:</strong> アポイントに活かせる課題認識・導入意欲</li>
-            </ul>
-            <p className="text-xs text-indigo-600 mt-2">
-              ※ 抽出テキストがあり、AI要約がまだないトピックが対象
-            </p>
-          </div>
+              )}
+            </div>
+          )}
         </section>
 
-        {/* SRT自動紐付けセクション（Google Drive） */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            SRT字幕 自動紐付け（Google Drive連携）
-          </h2>
-
-          <div className="space-y-4">
-            {/* 企業選択 */}
+        {/* AI再判定（未判定分） */}
+        <section className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                企業を選択 *
-              </label>
-              <select
-                value={autoLinkCompanyId}
-                onChange={(e) => setAutoLinkCompanyId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              >
-                <option value="">-- 企業を選択 --</option>
-                {companies.map((company) => (
-                  <option key={company.companyId} value={company.companyId}>
-                    {company.companyId} - {company.companyName}
-                  </option>
-                ))}
-              </select>
+              <h3 className="font-medium text-gray-800">AI再判定</h3>
+              <p className="text-xs text-gray-500">未判定のトピックをAI判定する</p>
             </div>
-
-            {/* 自動紐付けボタン */}
             <button
-              onClick={handleAutoLink}
-              disabled={isAutoLinking || !autoLinkCompanyId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isAutoLinking || !autoLinkCompanyId
+              onClick={handleRerank}
+              disabled={isReranking || !selectedCompanyId}
+              className={`px-4 py-2 rounded-lg text-sm font-medium text-white ${
+                isReranking || !selectedCompanyId
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-purple-600 hover:bg-purple-700"
               }`}
             >
-              {isAutoLinking ? "自動紐付け中..." : "Google DriveからSRTを自動取得・紐付け"}
+              {isReranking ? "判定中..." : "実行"}
             </button>
-
-            {/* 結果表示 */}
-            {autoLinkResult && (
-              <div className="p-4 bg-purple-50 rounded-lg">
-                <h3 className="font-medium text-purple-800 mb-2">自動紐付け結果</h3>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-white p-2 rounded border border-purple-200">
-                    <div className="text-xl font-bold text-green-600">{autoLinkResult.updated}</div>
-                    <div className="text-xs text-green-600">更新成功</div>
-                  </div>
-                  <div className="bg-white p-2 rounded border border-purple-200">
-                    <div className="text-xl font-bold text-gray-600">{autoLinkResult.skipped}</div>
-                    <div className="text-xs text-gray-600">スキップ</div>
-                  </div>
-                  <div className="bg-white p-2 rounded border border-purple-200">
-                    <div className="text-xl font-bold text-red-600">{autoLinkResult.failed}</div>
-                    <div className="text-xs text-red-600">失敗</div>
-                  </div>
-                </div>
-                <p className="text-xs text-purple-700 mt-2 text-center">
-                  {autoLinkResult.processed}件のトピックを処理
-                </p>
-              </div>
-            )}
           </div>
-
-          {/* 説明 */}
-          <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-            <h3 className="text-sm font-medium text-purple-800 mb-2">
-              自動紐付けの仕組み
-            </h3>
-            <ol className="text-xs text-purple-700 space-y-1 list-decimal list-inside">
-              <li>選択した企業のトピック（抽出テキストが空のもの）を取得</li>
-              <li>各トピックのグループID（YouTube動画ID）を確認</li>
-              <li>Google Driveから該当するSRTファイルを自動取得</li>
-              <li>開始秒数〜終了秒数の範囲の字幕を抽出して保存</li>
-            </ol>
-          </div>
+          {rerankResult && (
+            <div className="mt-3 p-3 bg-purple-50 rounded text-sm">
+              <span className="text-purple-800">
+                {rerankResult.processed}件判定:
+                A {rerankResult.summary.A} / B {rerankResult.summary.B} / C {rerankResult.summary.C}
+              </span>
+            </div>
+          )}
         </section>
 
-        {/* SRT手動紐付けセクション */}
-        <section className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            SRT字幕 手動紐付け（ファイルアップロード）
-          </h2>
+        {/* 詳細設定（折りたたみ） */}
+        <section className="bg-white rounded-lg shadow">
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full px-6 py-4 flex items-center justify-between text-left"
+          >
+            <span className="font-medium text-gray-700">詳細設定</span>
+            <span className="text-gray-400">{showAdvanced ? "▲" : "▼"}</span>
+          </button>
 
-          <div className="space-y-4">
-            {/* グループID入力 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                グループID（YouTube動画ID）*
-              </label>
-              <input
-                type="text"
-                value={srtGroupId}
-                onChange={(e) => setSrtGroupId(e.target.value)}
-                placeholder="例: pdbwk0Yxe7g"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400"
-              />
-            </div>
-
-            {/* SRTファイル選択 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                SRTファイル *
-              </label>
-              <input
-                id="srt-file"
-                type="file"
-                accept=".srt"
-                onChange={handleSrtFileChange}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-400"
-              />
-              {srtFile && (
-                <p className="text-sm text-gray-500 mt-1">
-                  選択中: {srtFile.name} ({(srtFile.size / 1024).toFixed(1)} KB)
-                </p>
-              )}
-            </div>
-
-            {/* 紐付けボタン */}
-            <button
-              onClick={handleLinkSrt}
-              disabled={isParsingSrt || !srtFile || !srtGroupId}
-              className={`w-full py-3 rounded-lg font-medium text-white ${
-                isParsingSrt || !srtFile || !srtGroupId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-gray-600 hover:bg-gray-700"
-              }`}
-            >
-              {isParsingSrt ? "紐付け中..." : "手動でSRTを紐付け"}
-            </button>
-
-            {/* 結果表示 */}
-            {srtLinkResult && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h3 className="font-medium text-gray-800 mb-2">紐付け結果</h3>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xl font-bold text-green-600">{srtLinkResult.updatedCount}</div>
-                    <div className="text-xs text-green-600">更新成功</div>
-                  </div>
-                  <div className="bg-white p-2 rounded border border-gray-200">
-                    <div className="text-xl font-bold text-gray-600">{srtLinkResult.skippedCount}</div>
-                    <div className="text-xs text-gray-600">スキップ</div>
-                  </div>
+          {showAdvanced && (
+            <div className="px-6 pb-6 space-y-6 border-t border-gray-100">
+              {/* 企業管理 */}
+              <div className="pt-4">
+                <h3 className="font-medium text-gray-800 mb-3">企業管理</h3>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={newCompanyName}
+                    onChange={(e) => setNewCompanyName(e.target.value)}
+                    placeholder="新規企業名"
+                    className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+                  />
+                  <button
+                    onClick={handleCreateCompany}
+                    disabled={isCreatingCompany || !newCompanyName}
+                    className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                  >
+                    登録
+                  </button>
                 </div>
+                <div className="flex flex-wrap gap-2">
+                  {companies.map((company) => (
+                    <span
+                      key={company.companyId}
+                      className="inline-flex items-center gap-1 bg-gray-100 rounded px-2 py-1 text-xs"
+                    >
+                      {company.companyId}: {company.companyName}
+                      <button
+                        onClick={() => toggleCompanyVisibility(company.companyId, true)}
+                        className="ml-1 text-gray-400 hover:text-red-500"
+                        title="非表示"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                {hiddenCompanies.length > 0 && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    非表示: {hiddenCompanies.map(c => c.companyName).join(", ")}
+                    <button
+                      onClick={() => hiddenCompanies.forEach(c => toggleCompanyVisibility(c.companyId, false))}
+                      className="ml-2 text-blue-500 hover:underline"
+                    >
+                      全て復元
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </section>
 
-        {/* 機能一覧 */}
-        <section className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">
-            実装済み機能
-          </h2>
-          <ul className="space-y-2 text-gray-600">
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              ダッシュボード統計（ステータス・優先度・最近のインポート）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              ワンクリック一括処理（SRT→要約→ランク付け）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              Slack通知（パイプライン完了時・スケジューラー完了時）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              トピックCSVアップロード
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              データ自動取込（Aコネクタ・JS-NEXT連携）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              AIキーワード自動生成（サービス情報からGPTで生成）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              0次・1次判定パイプライン
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              AI自動ランク付け（ゴールデンルール）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              AI要約生成（抽出テキスト分析）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              SRT読み込み・抽出機能（Google Drive連携）
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-500">✓</span>
-              CSVエクスポート（/api/v2/export?companyId=xxx）
-            </li>
-          </ul>
+              {/* 除外リスト */}
+              <div className="pt-4 border-t border-gray-100">
+                <h3 className="font-medium text-gray-800 mb-3">除外リスト（契約済み・NG自治体）</h3>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={(e) => setExclusionFile(e.target.files?.[0] || null)}
+                    className="flex-1 text-sm"
+                  />
+                  <button
+                    onClick={handleExclusionUpload}
+                    disabled={isUploadingList || !exclusionFile || !selectedCompanyId}
+                    className="px-4 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:bg-gray-400"
+                  >
+                    登録
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">CSV形式: 都道府県, 市町村, 理由</p>
+              </div>
+
+              {/* アプローチ先リスト */}
+              <div className="pt-4 border-t border-gray-100">
+                <h3 className="font-medium text-gray-800 mb-3">アプローチ先リスト</h3>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={(e) => setInclusionFile(e.target.files?.[0] || null)}
+                    className="flex-1 text-sm"
+                  />
+                  <button
+                    onClick={handleInclusionUpload}
+                    disabled={isUploadingList || !inclusionFile || !selectedCompanyId}
+                    className="px-4 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 disabled:bg-gray-400"
+                  >
+                    登録
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">CSV形式: 都道府県, 市町村, メモ</p>
+              </div>
+            </div>
+          )}
         </section>
       </main>
     </div>
