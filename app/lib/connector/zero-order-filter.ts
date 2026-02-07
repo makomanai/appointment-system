@@ -34,6 +34,7 @@ interface AiZeroOrderResult {
 
 /**
  * GPT-4o-miniで関連性を判定（バッチ処理）
+ * 明確な3つの基準でYes/No判定
  */
 async function judgeRelevanceWithAi(
   rows: JsNextExportRow[],
@@ -56,21 +57,26 @@ async function judgeRelevanceWithAi(
       `[${idx + 1}] タイトル: ${row.title || "なし"}\n概要: ${row.summary || "なし"}`
     ).join("\n\n");
 
-    const systemPrompt = `あなたは自治体向けソリューションの営業支援AIです。
-トピック（議会での質疑）がサービスに関連するかを判定してください。
+    const systemPrompt = `あなたは自治体向けソリューションの営業リード判定AIです。
+トピック（議会での質疑）がサービスの営業対象として適切かを判定してください。
 
 【サービス情報】
-名前: ${service.name}
-概要: ${service.description}
+サービス名: ${service.name}
+サービス概要: ${service.description}
 解決できる課題: ${service.targetProblems}
-キーワード: ${service.targetKeywords}
+関連キーワード: ${service.targetKeywords}
 
-【判定基準】
-- 関連あり(7-10点): サービスが解決できる課題に直接関係する
-- やや関連(4-6点): 間接的に関係する可能性がある
-- 関連なし(1-3点): サービスとは無関係
+【判定基準 - 以下の3項目をYes/Noで判定】
+Q1: 課題関連性 - 「解決できる課題」に記載された問題がトピックで議論されているか？
+Q2: キーワード関連 - 「関連キーワード」のいずれかがトピックの内容に関係するか？
+Q3: 導入可能性 - 自治体がこのサービスの導入を検討しそうな文脈か？
 
-JSON配列で回答: [{"id": 1, "score": 8}, {"id": 2, "score": 3}, ...]`;
+【通過条件】
+- 3項目中2つ以上がYesなら通過（passed: true）
+- スコア = Yesの数 × 3 + 1（1-10点）
+
+【出力形式】
+JSON: {"results": [{"id": 1, "q1": true, "q2": true, "q3": false, "score": 7, "passed": true}, ...]}`;
 
     const userPrompt = `以下のトピックを判定してください:\n\n${topicList}`;
 
@@ -88,7 +94,7 @@ JSON配列で回答: [{"id": 1, "score": 8}, {"id": 2, "score": 3}, ...]`;
             { role: "user", content: userPrompt },
           ],
           temperature: 0.1,
-          max_tokens: 200,
+          max_tokens: 300,
           response_format: { type: "json_object" },
         }),
       });
@@ -105,19 +111,25 @@ JSON配列で回答: [{"id": 1, "score": 8}, {"id": 2, "score": 3}, ...]`;
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || "{}";
       const parsed = JSON.parse(content);
-      const scores = parsed.results || parsed.scores || parsed;
+      const scores = parsed.results || parsed;
 
       // 結果をマッピング
       batch.forEach((row, idx) => {
         const scoreData = Array.isArray(scores)
           ? scores.find((s: { id: number }) => s.id === idx + 1)
           : null;
-        const score = scoreData?.score || 5;
-        results.push({
-          row,
-          score,
-          passed: score >= 5, // 5点以上で通過
-        });
+
+        if (scoreData) {
+          // Yes数をカウントしてスコア計算
+          const yesCount = [scoreData.q1, scoreData.q2, scoreData.q3].filter(Boolean).length;
+          const score = scoreData.score || (yesCount * 3 + 1);
+          const passed = scoreData.passed ?? (yesCount >= 2);
+
+          results.push({ row, score, passed });
+        } else {
+          // デフォルト
+          results.push({ row, score: 5, passed: true });
+        }
       });
 
     } catch (error) {
