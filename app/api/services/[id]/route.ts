@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { Service } from "../route";
+import { createServerSupabaseClient, isSupabaseConfigured } from "../../../lib/supabase";
 
 // サービス更新
 export async function PUT(
@@ -20,6 +21,8 @@ export async function PUT(
       );
     }
 
+    const now = new Date().toISOString();
+
     const updatedService: Service = {
       ...existingService,
       companyId: body.companyId ?? existingService.companyId,
@@ -28,10 +31,26 @@ export async function PUT(
       description: body.description ?? existingService.description,
       features: body.features ?? existingService.features,
       targetProblems: body.targetProblems ?? existingService.targetProblems,
-      updatedAt: new Date().toISOString(),
+      targetKeywords: body.targetKeywords ?? existingService.targetKeywords ?? "",
+      updatedAt: now,
     };
 
     await kv.hset("services", { [id]: updatedService });
+
+    // Supabaseにも同期（0次判定で使用するため）
+    if (isSupabaseConfigured()) {
+      const supabase = createServerSupabaseClient();
+      await supabase.from("services").upsert({
+        id,
+        company_id: updatedService.companyId,
+        name: updatedService.name,
+        description: updatedService.description,
+        features: updatedService.features,
+        target_problems: updatedService.targetProblems,
+        target_keywords: updatedService.targetKeywords,
+        updated_at: now,
+      }, { onConflict: "id" });
+    }
 
     return NextResponse.json({ success: true, data: updatedService });
   } catch (error) {
@@ -61,6 +80,12 @@ export async function DELETE(
     }
 
     await kv.hdel("services", id);
+
+    // Supabaseからも削除
+    if (isSupabaseConfigured()) {
+      const supabase = createServerSupabaseClient();
+      await supabase.from("services").delete().eq("id", id);
+    }
 
     return NextResponse.json({ success: true, message: "サービスを削除しました" });
   } catch (error) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
+import { createServerSupabaseClient, isSupabaseConfigured } from "../../lib/supabase";
 
 export interface Service {
   id: string;
@@ -9,6 +10,7 @@ export interface Service {
   description: string;
   features: string;
   targetProblems: string;
+  targetKeywords: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { companyId, companyName, name, description, features, targetProblems } = body;
+    const { companyId, companyName, name, description, features, targetProblems, targetKeywords } = body;
 
     if (!companyId || !name) {
       return NextResponse.json(
@@ -66,11 +68,28 @@ export async function POST(request: NextRequest) {
       description: description || "",
       features: features || "",
       targetProblems: targetProblems || "",
+      targetKeywords: targetKeywords || "",
       createdAt: now,
       updatedAt: now,
     };
 
     await kv.hset("services", { [id]: service });
+
+    // Supabaseにも同期（0次判定で使用するため）
+    if (isSupabaseConfigured()) {
+      const supabase = createServerSupabaseClient();
+      await supabase.from("services").upsert({
+        id,
+        company_id: companyId,
+        name,
+        description: description || "",
+        features: features || "",
+        target_problems: targetProblems || "",
+        target_keywords: targetKeywords || "",
+        created_at: now,
+        updated_at: now,
+      }, { onConflict: "id" });
+    }
 
     return NextResponse.json({ success: true, data: service });
   } catch (error) {

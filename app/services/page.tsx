@@ -12,6 +12,7 @@ interface Service {
   description: string;
   features: string;
   targetProblems: string;
+  targetKeywords: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +39,7 @@ export default function ServicesPage() {
     description: "",
     features: "",
     targetProblems: "",
+    targetKeywords: "",
   });
 
   // 企業一覧取得
@@ -125,6 +127,7 @@ export default function ServicesPage() {
       description: service.description,
       features: service.features,
       targetProblems: service.targetProblems,
+      targetKeywords: service.targetKeywords || "",
     });
     setIsEditing(true);
   };
@@ -156,6 +159,7 @@ export default function ServicesPage() {
       description: "",
       features: "",
       targetProblems: "",
+      targetKeywords: "",
     });
     setEditingService(null);
     setIsEditing(false);
@@ -270,6 +274,25 @@ export default function ServicesPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    検索キーワード
+                    <span className="ml-1 text-xs text-orange-600 font-normal">（0次判定で使用）</span>
+                  </label>
+                  <textarea
+                    value={formData.targetKeywords}
+                    onChange={(e) =>
+                      setFormData({ ...formData, targetKeywords: e.target.value })
+                    }
+                    rows={2}
+                    className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-orange-50"
+                    placeholder="児童相談, 虐待, 一時保護, DX, システム（カンマ区切り）"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    上位10個が必須キーワード（+4点）、それ以降は推奨キーワード（+2点）として使用
+                  </p>
+                </div>
+
                 <div className="flex gap-2">
                   <button
                     type="submit"
@@ -357,6 +380,16 @@ export default function ServicesPage() {
                               </span>
                               <p className="text-sm text-gray-600 whitespace-pre-line">
                                 {service.targetProblems}
+                              </p>
+                            </div>
+                          )}
+                          {service.targetKeywords && (
+                            <div className="mt-2">
+                              <span className="text-xs font-medium text-orange-600">
+                                検索キーワード:
+                              </span>
+                              <p className="text-sm text-orange-700 bg-orange-50 px-2 py-1 rounded mt-1">
+                                {service.targetKeywords}
                               </p>
                             </div>
                           )}
