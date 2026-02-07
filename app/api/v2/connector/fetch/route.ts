@@ -14,7 +14,7 @@ import {
   isJsNextConfigured,
   ExportSearchConditions,
 } from "../../../../lib/connector/js-next-connector";
-import { runPipeline, getServiceKeywordConfig } from "../../../../lib/connector/pipeline";
+import { runPipeline, getServiceKeywordConfig, getServiceContext } from "../../../../lib/connector/pipeline";
 import { getDefaultServiceKeywordConfig } from "../../../../lib/connector/zero-order-filter";
 import { ServiceKeywordConfig } from "../../../../lib/connector/types";
 import {
@@ -175,9 +175,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // サービスコンテキストを取得（AI 0次判定用）
+    const serviceContext = await getServiceContext(companyId);
+
     // パイプライン実行（0次→一次→DB投入）
     const result = await runPipeline(rows, companyId, keywordConfig, {
       zeroOrderLimit: limit,
+      useAiZeroOrder: true, // GPT-4o-miniでAI 0次判定
+      serviceContext,
       dryRun,
     });
 

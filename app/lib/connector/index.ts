@@ -17,9 +17,11 @@ export type { ExportSearchConditions } from "./js-next-connector";
 export {
   calculateZeroOrderScore,
   runZeroOrderFilter,
+  runAiZeroOrderFilter,
   getDefaultServiceKeywordConfig,
   buildServiceKeywordConfig,
 } from "./zero-order-filter";
+export type { ServiceContext } from "./zero-order-filter";
 
 // 一次判定
 export {

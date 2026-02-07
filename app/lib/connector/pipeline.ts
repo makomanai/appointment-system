@@ -13,11 +13,42 @@ import {
   PipelineResult,
   ServiceKeywordConfig,
 } from "./types";
-import { runZeroOrderFilter, buildServiceKeywordConfig } from "./zero-order-filter";
+import { runZeroOrderFilter, runAiZeroOrderFilter, buildServiceKeywordConfig, ServiceContext } from "./zero-order-filter";
 import { runFirstOrderFilter } from "./first-order-filter";
 import { normalizeResults, toImportPayload } from "./normalizer";
 import { applyExclusionFilter } from "./exclusion-filter";
 import { runAiRanking, getServiceInfoForCompany, ServiceInfo } from "./ai-ranker";
+
+/**
+ * サービスコンテキストを取得（AI 0次判定用）
+ */
+export async function getServiceContext(
+  companyId: string
+): Promise<ServiceContext | null> {
+  if (!isSupabaseConfigured()) {
+    return null;
+  }
+
+  const supabase = createServerSupabaseClient();
+
+  const { data: services, error } = await supabase
+    .from("services")
+    .select("name, description, target_keywords, target_problems")
+    .eq("company_id", companyId)
+    .limit(1);
+
+  if (error || !services || services.length === 0) {
+    return null;
+  }
+
+  const service = services[0];
+  return {
+    name: service.name,
+    description: service.description || "",
+    targetProblems: service.target_problems || "",
+    targetKeywords: service.target_keywords || "",
+  };
+}
 
 /**
  * サービスIDからキーワード設定を取得
@@ -65,6 +96,8 @@ export async function runPipeline(
     zeroOrderLimit?: number;
     firstOrderLimit?: number; // 1次判定前の足切り上限
     enableAiRanking?: boolean; // AI判定を有効化
+    useAiZeroOrder?: boolean; // AI 0次判定を使用（GPT-4o-mini）
+    serviceContext?: ServiceContext | null; // AI 0次判定用サービス情報
     dryRun?: boolean;
   } = {}
 ): Promise<PipelineResult> {
@@ -72,6 +105,8 @@ export async function runPipeline(
     zeroOrderLimit = 0, // 0 = 制限なし（B評価以上を全件通過）
     firstOrderLimit = 100, // 1次判定前の足切り上限（デフォルト100件）
     enableAiRanking = true, // デフォルトでAI判定を有効化
+    useAiZeroOrder = true, // デフォルトでAI 0次判定を使用
+    serviceContext = null,
     dryRun = false
   } = options;
   const errors: string[] = [];
@@ -113,9 +148,27 @@ export async function runPipeline(
     };
   }
 
-  // Step 1: 0次判定
+  // Step 1: 0次判定（AI or キーワード）
   console.log("\n--- Step 1: 0次判定 ---");
-  const zeroResults = runZeroOrderFilter(filteredRows, keywordConfig, zeroOrderLimit);
+  let zeroResults;
+
+  // AI 0次判定を使用（サービス情報がある場合）
+  if (useAiZeroOrder && serviceContext && process.env.OPENAI_API_KEY) {
+    console.log("[Pipeline] AI 0次判定（GPT-4o-mini）を使用");
+    try {
+      zeroResults = await runAiZeroOrderFilter(filteredRows, serviceContext, zeroOrderLimit);
+    } catch (error) {
+      console.error("[Pipeline] AI 0次判定エラー、キーワード判定にフォールバック:", error);
+      errors.push(`AI 0次判定エラー: ${error instanceof Error ? error.message : "Unknown"}`);
+      zeroResults = runZeroOrderFilter(filteredRows, keywordConfig, zeroOrderLimit);
+    }
+  } else {
+    // キーワードベースの0次判定
+    if (useAiZeroOrder && !serviceContext) {
+      console.log("[Pipeline] サービス情報なし、キーワード判定を使用");
+    }
+    zeroResults = runZeroOrderFilter(filteredRows, keywordConfig, zeroOrderLimit);
+  }
 
   if (zeroResults.length === 0) {
     console.log("[Pipeline] 0次判定通過なし、パイプライン終了");

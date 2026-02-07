@@ -1,9 +1,9 @@
 /**
  * 0次判定 - 字幕なしフィルタ
  *
- * スコア計算: score = must*4 + should*2 - not*10 + meta
- * Pass条件: (must>=1 & score>=8) OR (should>=3 & score>=7)
- * 出力: 上位50件
+ * 2つのモード:
+ * 1. キーワードベース: score = must*4 + should*2 - not*10 + meta
+ * 2. AIベース: GPT-4o-miniで関連性を判定（低コスト）
  */
 
 import {
@@ -11,6 +11,196 @@ import {
   ServiceKeywordConfig,
   ZeroOrderResult,
 } from "./types";
+
+/**
+ * サービス情報（AI判定用）
+ */
+export interface ServiceContext {
+  name: string;
+  description: string;
+  targetProblems: string;
+  targetKeywords: string;
+}
+
+/**
+ * AI判定結果
+ */
+interface AiZeroOrderResult {
+  row: JsNextExportRow;
+  score: number;
+  passed: boolean;
+  reasoning?: string;
+}
+
+/**
+ * GPT-4o-miniで関連性を判定（バッチ処理）
+ */
+async function judgeRelevanceWithAi(
+  rows: JsNextExportRow[],
+  service: ServiceContext,
+  batchSize: number = 10
+): Promise<AiZeroOrderResult[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const results: AiZeroOrderResult[] = [];
+
+  // バッチ処理
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+
+    // 複数トピックをまとめて判定
+    const topicList = batch.map((row, idx) =>
+      `[${idx + 1}] タイトル: ${row.title || "なし"}\n概要: ${row.summary || "なし"}`
+    ).join("\n\n");
+
+    const systemPrompt = `あなたは自治体向けソリューションの営業支援AIです。
+トピック（議会での質疑）がサービスに関連するかを判定してください。
+
+【サービス情報】
+名前: ${service.name}
+概要: ${service.description}
+解決できる課題: ${service.targetProblems}
+キーワード: ${service.targetKeywords}
+
+【判定基準】
+- 関連あり(7-10点): サービスが解決できる課題に直接関係する
+- やや関連(4-6点): 間接的に関係する可能性がある
+- 関連なし(1-3点): サービスとは無関係
+
+JSON配列で回答: [{"id": 1, "score": 8}, {"id": 2, "score": 3}, ...]`;
+
+    const userPrompt = `以下のトピックを判定してください:\n\n${topicList}`;
+
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.1,
+          max_tokens: 200,
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (!response.ok) {
+        console.error(`[AI0次判定] APIエラー: ${response.status}`);
+        // エラー時はデフォルトスコアで通過
+        batch.forEach((row) => {
+          results.push({ row, score: 5, passed: true });
+        });
+        continue;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || "{}";
+      const parsed = JSON.parse(content);
+      const scores = parsed.results || parsed.scores || parsed;
+
+      // 結果をマッピング
+      batch.forEach((row, idx) => {
+        const scoreData = Array.isArray(scores)
+          ? scores.find((s: { id: number }) => s.id === idx + 1)
+          : null;
+        const score = scoreData?.score || 5;
+        results.push({
+          row,
+          score,
+          passed: score >= 5, // 5点以上で通過
+        });
+      });
+
+    } catch (error) {
+      console.error(`[AI0次判定] エラー:`, error);
+      // エラー時はデフォルトで通過
+      batch.forEach((row) => {
+        results.push({ row, score: 5, passed: true });
+      });
+    }
+
+    // 進捗ログ
+    console.log(`[AI0次判定] 進捗: ${Math.min(i + batchSize, rows.length)}/${rows.length}`);
+  }
+
+  return results;
+}
+
+/**
+ * AI0次判定を実行
+ */
+export async function runAiZeroOrderFilter(
+  rows: JsNextExportRow[],
+  service: ServiceContext,
+  limit: number = 0
+): Promise<ZeroOrderResult[]> {
+  console.log(`[AI0次判定] ${rows.length}件をGPT-4o-miniで判定...`);
+  console.log(`[AI0次判定] サービス: ${service.name}`);
+
+  // 重複排除
+  const seen = new Set<string>();
+  const uniqueRows: JsNextExportRow[] = [];
+  for (const row of rows) {
+    const key = getDedupeKey(row);
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueRows.push(row);
+    }
+  }
+
+  if (uniqueRows.length < rows.length) {
+    console.log(`[AI0次判定] 重複排除: ${rows.length}件 → ${uniqueRows.length}件`);
+  }
+
+  // AI判定実行
+  const aiResults = await judgeRelevanceWithAi(uniqueRows, service);
+
+  // ZeroOrderResult形式に変換
+  const results: ZeroOrderResult[] = aiResults.map((r) => ({
+    row: r.row,
+    mustCount: r.score >= 7 ? 2 : r.score >= 5 ? 1 : 0,
+    shouldCount: Math.floor(r.score / 2),
+    notCount: 0,
+    metaScore: 0,
+    score: r.score,
+    passed: r.passed,
+  }));
+
+  // Pass条件を満たすものをフィルタ
+  const passed = results.filter((r) => r.passed);
+  console.log(`[AI0次判定] 通過: ${passed.length}件`);
+
+  // スコア降順でソート
+  passed.sort((a, b) => b.score - a.score);
+
+  // limit適用
+  const topN = limit > 0 ? passed.slice(0, limit) : passed;
+
+  if (limit > 0 && passed.length > limit) {
+    console.log(`[AI0次判定] 上位${limit}件に制限`);
+  }
+
+  // 統計
+  if (topN.length > 0) {
+    const stats = {
+      max: Math.max(...topN.map((r) => r.score)),
+      min: Math.min(...topN.map((r) => r.score)),
+      avg: (topN.reduce((sum, r) => sum + r.score, 0) / topN.length).toFixed(1),
+    };
+    console.log(`[AI0次判定] スコア統計:`, stats);
+  }
+
+  return topN;
+}
 
 /**
  * テキスト内のキーワードをカウント
