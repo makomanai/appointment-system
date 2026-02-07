@@ -229,7 +229,8 @@ export function buildServiceKeywordConfig(
   serviceId: string,
   serviceName: string,
   description: string,
-  targetKeywords: string | null
+  targetKeywords: string | null,
+  targetProblems?: string | null
 ): ServiceKeywordConfig {
   // target_keywordsをパース（カンマ区切りを想定）
   const keywords = targetKeywords
@@ -242,12 +243,24 @@ export function buildServiceKeywordConfig(
     .split(/\s+/)
     .filter((w) => w.length >= 2 && w.length <= 10);
 
+  // targetProblems（解決できる課題）からキーワードを抽出 - 重要度高
+  const problemKeywords = targetProblems
+    ? targetProblems
+        .replace(/[。、・\n]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 2 && w.length <= 15)
+    : [];
+
   return {
     serviceId,
     serviceName,
-    must: keywords.slice(0, 10), // target_keywordsの上位10個をmust
+    must: [
+      ...keywords.slice(0, 10), // target_keywordsの上位10個
+      ...problemKeywords.slice(0, 5), // 解決できる課題から上位5個も必須に追加
+    ],
     should: [
       ...keywords.slice(10),
+      ...problemKeywords.slice(5), // 残りの課題キーワード
       ...descKeywords.slice(0, 10),
       // 汎用キーワード
       "DX", "システム", "導入", "予算", "来年度",

@@ -35,7 +35,7 @@ export async function getServiceKeywordConfig(
   // 企業のサービス情報を取得
   const { data: services, error } = await supabase
     .from("services")
-    .select("id, name, description, target_keywords")
+    .select("id, name, description, target_keywords, target_problems")
     .eq("company_id", companyId)
     .limit(1);
 
@@ -49,7 +49,8 @@ export async function getServiceKeywordConfig(
     service.id,
     service.name,
     service.description || "",
-    service.target_keywords || null
+    service.target_keywords || null,
+    service.target_problems || null
   );
 }
 

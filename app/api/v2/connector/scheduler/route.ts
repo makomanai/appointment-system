@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
         // 企業のサービス情報を取得
         const { data: services } = await supabase
           .from("services")
-          .select("id, name, description, target_keywords")
+          .select("id, name, description, target_keywords, target_problems")
           .eq("company_id", company.company_id)
           .limit(1);
 
@@ -159,7 +159,8 @@ export async function POST(request: NextRequest) {
             service.id,
             service.name,
             service.description || "",
-            service.target_keywords || null
+            service.target_keywords || null,
+            service.target_problems || null
           );
         } else {
           keywordConfig = getDefaultServiceKeywordConfig("default");
