@@ -19,7 +19,8 @@ export default function AdminPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // データ取込用
+  // データ取込用（CSVアップロード）
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
     totalFetched: number;
@@ -113,10 +114,15 @@ export default function AdminPage() {
     fetchStats();
   }, []);
 
-  // メイン機能: データ取込（コネクタ経由）
+  // メイン機能: CSVアップロードでデータ取込
   const handleImport = async () => {
     if (!selectedCompanyId) {
       setMessage({ type: "error", text: "企業を選択してください" });
+      return;
+    }
+
+    if (!csvFile) {
+      setMessage({ type: "error", text: "CSVファイルを選択してください" });
       return;
     }
 
@@ -125,14 +131,14 @@ export default function AdminPage() {
     setMessage(null);
 
     try {
-      const response = await fetch("/api/v2/connector/fetch", {
+      const formData = new FormData();
+      formData.append("file", csvFile);
+      formData.append("companyId", selectedCompanyId);
+      formData.append("dryRun", "false");
+
+      const response = await fetch("/api/v2/connector/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId: selectedCompanyId,
-          dryRun: false,
-          limit: 0,
-        }),
+        body: formData,
       });
 
       const result = await response.json();
@@ -148,6 +154,7 @@ export default function AdminPage() {
           type: "success",
           text: `${result.importedCount}件を取り込みました`,
         });
+        setCsvFile(null);
         // 統計を更新
         await fetchStats();
       } else {
@@ -431,16 +438,50 @@ export default function AdminPage() {
             </select>
           </div>
 
-          {/* Step 2: 実行ボタン */}
+          {/* Step 2: CSVファイル選択 */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              2. データを取り込む
+              2. JS-NEXTからダウンロードしたCSVを選択
+            </label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition">
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                className="hidden"
+                id="csv-upload"
+              />
+              <label
+                htmlFor="csv-upload"
+                className="cursor-pointer block"
+              >
+                {csvFile ? (
+                  <div className="text-blue-600">
+                    <span className="font-medium">{csvFile.name}</span>
+                    <span className="text-gray-500 text-sm ml-2">
+                      ({(csvFile.size / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-gray-500">
+                    <span className="text-2xl">+</span>
+                    <p className="text-sm mt-1">クリックしてCSVを選択</p>
+                  </div>
+                )}
+              </label>
+            </div>
+          </div>
+
+          {/* Step 3: 実行ボタン */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              3. データを取り込む
             </label>
             <button
               onClick={handleImport}
-              disabled={isImporting || !selectedCompanyId}
+              disabled={isImporting || !selectedCompanyId || !csvFile}
               className={`w-full py-4 rounded-lg font-bold text-lg text-white transition ${
-                isImporting || !selectedCompanyId
+                isImporting || !selectedCompanyId || !csvFile
                   ? "bg-gray-400 cursor-not-allowed"
                   : "bg-blue-600 hover:bg-blue-700"
               }`}
@@ -448,14 +489,14 @@ export default function AdminPage() {
               {isImporting ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
-                  取込中...
+                  取込中...（AI判定含む）
                 </span>
               ) : (
-                "新規データを取込"
+                "CSVを取り込む"
               )}
             </button>
             <p className="text-xs text-gray-500 mt-2">
-              自動で: フィルタリング → SRT取得 → AI判定 → DB保存
+              処理: 0次フィルタ（AI） → 1次判定（SRT） → AI優先度判定 → DB保存
             </p>
           </div>
 
