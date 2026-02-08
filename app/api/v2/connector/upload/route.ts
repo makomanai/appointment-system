@@ -22,7 +22,10 @@ import { notifyPipelineComplete, isSlackConfigured } from "../../../../lib/slack
  * - ヘッダーなしCSV（JS-NEXT形式）を自動検出
  */
 function parseCSVToRows(csvText: string): JsNextExportRow[] {
-  const lines = csvText.split(/\r?\n/).filter((line) => line.trim());
+  // BOM（Byte Order Mark）を除去
+  const cleanText = csvText.replace(/^\uFEFF/, "");
+
+  const lines = cleanText.split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 1) return [];
 
   const firstLine = parseCSVLine(lines[0]);
@@ -241,10 +244,17 @@ export async function POST(request: NextRequest) {
       should: keywordConfig.should.length,
     });
 
+    // サービスコンテキストを取得（AI 0次判定用）
+    const { getServiceContext } = await import("../../../../lib/connector/pipeline");
+    const serviceContext = await getServiceContext(companyId);
+    console.log(`[Upload] サービスコンテキスト:`, serviceContext ? serviceContext.name : "なし");
+
     // パイプライン実行（0次 → 1次 → DB投入）
     const result = await runPipeline(rows, companyId, keywordConfig, {
       zeroOrderLimit: 0, // B評価以上は全件通過
       firstOrderLimit: skipFirstOrder ? 0 : 100, // 1次判定の上限
+      useAiZeroOrder: true, // AI 0次判定を使用
+      serviceContext,
       dryRun,
     });
 
