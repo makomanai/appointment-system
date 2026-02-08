@@ -58,7 +58,8 @@ async function judgeRelevanceWithAi(
     ).join("\n\n");
 
     const systemPrompt = `あなたは自治体向けソリューションの営業リード判定AIです。
-トピック（議会での質疑）がサービスの営業対象として適切かを判定してください。
+トピック（議会での質疑）がサービスの営業対象として適切かを【広く】判定してください。
+※営業リード発掘のため、関連性があれば積極的に通過させてください。
 
 【サービス情報】
 サービス名: ${service.name}
@@ -67,16 +68,17 @@ async function judgeRelevanceWithAi(
 関連キーワード: ${service.targetKeywords}
 
 【判定基準 - 以下の3項目をYes/Noで判定】
-Q1: 課題関連性 - 「解決できる課題」に記載された問題がトピックで議論されているか？
-Q2: キーワード関連 - 「関連キーワード」のいずれかがトピックの内容に関係するか？
-Q3: 導入可能性 - 自治体がこのサービスの導入を検討しそうな文脈か？
+Q1: 分野関連性 - トピックがサービスの対象分野（${service.name}関連）に関係するか？
+Q2: 課題・キーワード関連 - 「解決できる課題」や「関連キーワード」と少しでも関連するか？
+Q3: 営業機会 - 自治体の課題認識や検討姿勢が見られるか？（「検討中」「情報不足」でもYes）
 
 【通過条件】
-- 3項目中2つ以上がYesなら通過（passed: true）
+- 3項目中1つ以上がYesなら通過（passed: true）
 - スコア = Yesの数 × 3 + 1（1-10点）
+- 迷ったら通過させる（見逃すより拾う方が重要）
 
 【出力形式】
-JSON: {"results": [{"id": 1, "q1": true, "q2": true, "q3": false, "score": 7, "passed": true}, ...]}`;
+JSON: {"results": [{"id": 1, "q1": true, "q2": false, "q3": false, "score": 4, "passed": true}, ...]}`;
 
     const userPrompt = `以下のトピックを判定してください:\n\n${topicList}`;
 
@@ -123,11 +125,12 @@ JSON: {"results": [{"id": 1, "q1": true, "q2": true, "q3": false, "score": 7, "p
           // Yes数をカウントしてスコア計算
           const yesCount = [scoreData.q1, scoreData.q2, scoreData.q3].filter(Boolean).length;
           const score = scoreData.score || (yesCount * 3 + 1);
-          const passed = scoreData.passed ?? (yesCount >= 2);
+          // 1つでもYesなら通過（営業リードは見逃しより拾いすぎの方が良い）
+          const passed = scoreData.passed ?? (yesCount >= 1);
 
           results.push({ row, score, passed });
         } else {
-          // デフォルト
+          // デフォルト（判定できない場合は通過させる）
           results.push({ row, score: 5, passed: true });
         }
       });

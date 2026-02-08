@@ -18,9 +18,34 @@ import { notifyPipelineComplete, isSlackConfigured } from "../../../../lib/slack
 
 /**
  * CSVテキストをJsNextExportRow配列に変換
+ * - ヘッダーありCSV（標準形式）
+ * - ヘッダーなしCSV（JS-NEXT形式）を自動検出
  */
 function parseCSVToRows(csvText: string): JsNextExportRow[] {
   const lines = csvText.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 1) return [];
+
+  const firstLine = parseCSVLine(lines[0]);
+
+  // ヘッダー行かどうかを判定
+  // - 1列目が数字のみならヘッダーなし（JS-NEXT形式）
+  // - 「都道府県」「prefecture」などが含まれていればヘッダーあり
+  const isHeaderRow = isNaN(Number(firstLine[0])) &&
+    (firstLine.some(h => /^(group_id|グループid|prefecture|都道府県|title|タイトル)$/i.test(h.trim())));
+
+  if (isHeaderRow) {
+    // ヘッダーありCSV
+    return parseCSVWithHeaders(lines);
+  } else {
+    // ヘッダーなしCSV（JS-NEXT形式）
+    return parseJsNextCSV(lines);
+  }
+}
+
+/**
+ * ヘッダーありCSVをパース
+ */
+function parseCSVWithHeaders(lines: string[]): JsNextExportRow[] {
   if (lines.length < 2) return [];
 
   const headers = parseCSVLine(lines[0]).map((h) =>
@@ -54,6 +79,39 @@ function parseCSVToRows(csvText: string): JsNextExportRow[] {
     });
   }
 
+  return rows;
+}
+
+/**
+ * JS-NEXT形式CSVをパース（ヘッダーなし、位置ベース）
+ * 列順: external_id, title, summary, prefecture, city, category, council_date, source_url, stance, questioner, answerer, start_sec, end_sec, group_id
+ */
+function parseJsNextCSV(lines: string[]): JsNextExportRow[] {
+  const rows: JsNextExportRow[] = [];
+
+  for (const line of lines) {
+    const values = parseCSVLine(line);
+    if (values.length < 10) continue; // 最低10列必要
+
+    rows.push({
+      external_id: values[0] || undefined,
+      title: values[1] || "",
+      summary: values[2] || "",
+      prefecture: values[3] || "",
+      city: values[4] || "",
+      category: values[5] || undefined,
+      council_date: values[6] || "",
+      source_url: values[7] || "",
+      stance: values[8] || undefined,
+      questioner: values[9] || "",
+      answerer: values[10] || "",
+      start_sec: parseInt(values[11] || "0", 10),
+      end_sec: parseInt(values[12] || "0", 10),
+      group_id: values[13] || "",
+    });
+  }
+
+  console.log(`[Upload] JS-NEXT形式CSVをパース: ${rows.length}件`);
   return rows;
 }
 
