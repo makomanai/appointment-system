@@ -323,12 +323,44 @@ export async function runPipeline(
   }
 
   // 既存取り込みと同じ形式でDBに投入（AI判定結果のpriorityを含む）
+  // C判定はDBに保存しない（コスト削減 + 不要データ除外）
   const importPayload = toImportPayload(normalized, companyId, priorityMap);
+
+  // C判定を除外
+  const filteredPayload = importPayload.filter((item) => {
+    // priorityがCのものは除外
+    if (item.priority === "C") {
+      return false;
+    }
+    return true;
+  });
+
+  const cRankCount = importPayload.length - filteredPayload.length;
+  if (cRankCount > 0) {
+    console.log(`[Pipeline] C判定を除外: ${cRankCount}件`);
+  }
+
+  if (filteredPayload.length === 0) {
+    console.log("[Pipeline] A/B判定がないため、DB投入をスキップ");
+    return {
+      totalFetched: rows.length,
+      includedCount,
+      excludedCount: excluded.length,
+      zeroOrderPassed: zeroResults.length,
+      firstOrderProcessed: firstResults.length,
+      aiRankedCount: aiRankedCount > 0 ? aiRankedCount : undefined,
+      aiRankDistribution,
+      importedCount: 0,
+      cRankExcluded: cRankCount,
+      errors,
+    };
+  }
+
   const supabase = createServerSupabaseClient();
 
   const { data, error } = await supabase
     .from("topics")
-    .upsert(importPayload, {
+    .upsert(filteredPayload, {
       onConflict: "company_row_key",
       ignoreDuplicates: false,
     })
@@ -346,6 +378,7 @@ export async function runPipeline(
       firstOrderProcessed: firstResults.length,
       aiRankedCount: aiRankedCount > 0 ? aiRankedCount : undefined,
       aiRankDistribution,
+      cRankExcluded: cRankCount,
       importedCount: 0,
       errors,
     };
@@ -364,6 +397,7 @@ export async function runPipeline(
     firstOrderProcessed: firstResults.length,
     aiRankedCount: aiRankedCount > 0 ? aiRankedCount : undefined,
     aiRankDistribution,
+    cRankExcluded: cRankCount,
     importedCount,
     errors,
   };

@@ -379,6 +379,47 @@ export default function Home() {
     setIsSidebarOpen(false); // モバイルでは選択後にサイドバーを閉じる
   }, []);
 
+  // CSVエクスポート
+  const handleExportCSV = useCallback(async () => {
+    if (!selectedCompany) return;
+
+    try {
+      const response = await fetch(
+        `/api/v2/topics/export?companyId=${encodeURIComponent(selectedCompany.companyId)}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "エクスポートに失敗しました");
+      }
+
+      // Blobとしてダウンロード
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      // Content-Dispositionからファイル名を取得
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "アタックリスト.csv";
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (match) {
+          filename = decodeURIComponent(match[1]);
+        }
+      }
+
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("CSVエクスポートエラー:", error);
+      alert(error instanceof Error ? error.message : "エクスポートに失敗しました");
+    }
+  }, [selectedCompany]);
+
   // 自治体名を抽出（モバイル表示用）
   const extractMunicipality = (councilDate: string): string => {
     const match = councilDate.match(/^(.+?)(議会|市議会|町議会|村議会)/);
@@ -466,6 +507,18 @@ export default function Home() {
                   変更
                 </button>
               </div>
+
+              {/* CSVエクスポートボタン */}
+              <button
+                onClick={handleExportCSV}
+                className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 transition"
+                title="アタックリストをCSVでダウンロード"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                CSV
+              </button>
             </div>
 
             {/* 右側：ナビゲーション */}
@@ -579,13 +632,22 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            {/* 企業変更ボタン */}
-            <div className="px-4 py-2 border-b border-gray-100">
+            {/* 企業変更・CSVエクスポート */}
+            <div className="px-4 py-2 border-b border-gray-100 flex justify-between items-center">
               <button
                 onClick={handleChangeCompany}
                 className="text-sm text-blue-600 hover:text-blue-800"
               >
                 企業を変更
+              </button>
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M6 21h12" />
+                </svg>
+                CSV
               </button>
             </div>
             {/* 案件リスト */}

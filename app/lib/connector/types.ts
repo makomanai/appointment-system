@@ -110,6 +110,7 @@ export interface PipelineResult {
     B: number;
     C: number;
   };
+  cRankExcluded?: number;      // C判定で除外された件数
   importedCount: number;
   errors: string[];
 }
