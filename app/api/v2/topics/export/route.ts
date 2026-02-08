@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // CSVヘッダー
+    // CSVヘッダー（アタックリスト用に厳選）
     const headers = [
       "優先度",
       "ステータス",
@@ -80,23 +80,21 @@ export async function GET(request: NextRequest) {
       "議題概要",
       "質問者",
       "回答者",
-      "根拠抜粋",
       "動画URL",
       "登録日",
     ];
 
-    // CSVデータを生成
+    // CSVデータを生成（長いテキストは切り詰め）
     const csvRows = topics.map((topic) => [
       topic.priority || "",
       topic.status || "未着手",
       topic.prefecture || "",
       topic.city || "",
       topic.council_date || "",
-      escapeCSV(topic.title || ""),
-      escapeCSV(topic.summary || ""),
-      topic.questioner || "",
-      topic.answerer || "",
-      escapeCSV(topic.excerpt_text || ""),
+      escapeCSV(truncateText(topic.title || "", 100)),
+      escapeCSV(truncateText(topic.summary || "", 300)),
+      escapeCSV(topic.questioner || ""),
+      escapeCSV(topic.answerer || ""),
       topic.source_url || "",
       topic.created_at ? new Date(topic.created_at).toLocaleDateString("ja-JP") : "",
     ]);
@@ -141,6 +139,15 @@ export async function GET(request: NextRequest) {
 }
 
 /**
+ * テキストを指定文字数で切り詰め
+ */
+function truncateText(text: string, maxLength: number): string {
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + "...";
+}
+
+/**
  * CSV用にエスケープ（ダブルクォートと改行を処理）
  */
 function escapeCSV(value: string): string {
@@ -152,10 +159,6 @@ function escapeCSV(value: string): string {
   // ダブルクォートをエスケープ
   escaped = escaped.replace(/"/g, '""');
 
-  // カンマ、ダブルクォート、改行を含む場合はクォートで囲む
-  if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
-    escaped = `"${escaped}"`;
-  }
-
-  return escaped;
+  // 常にクォートで囲む（安全のため）
+  return `"${escaped}"`;
 }
