@@ -45,14 +45,23 @@ export async function POST(request: NextRequest) {
       }
 
       // トピックIDを取得
-      const { data: topic } = await supabase
+      const { data: topic, error: topicLookupError } = await supabase
         .from("topics")
         .select("id")
         .eq("company_row_key", companyRowKey)
         .single();
 
-      // 架電結果を保存
-      if (topic?.id && formData.callResult) {
+      if (topicLookupError || !topic?.id) {
+        console.error("トピックID取得エラー:", topicLookupError, "companyRowKey:", companyRowKey);
+        return NextResponse.json(
+          { success: false, error: `トピックが見つかりません (key: ${companyRowKey})` },
+          { status: 404 }
+        );
+      }
+
+      // 架電結果を保存（架電結果・次のアクション・次回日程・メモのいずれかがあれば保存）
+      const hasCallData = formData.callResult || formData.nextAction || formData.nextDate || formData.memo;
+      if (hasCallData) {
         const { error: callError } = await supabase.from("call_results").insert({
           topic_id: topic.id,
           call_result: formData.callResult || null,
@@ -63,6 +72,7 @@ export async function POST(request: NextRequest) {
 
         if (callError) {
           console.error("架電結果保存エラー:", callError);
+          throw callError;
         }
       }
 
@@ -223,6 +233,8 @@ export async function GET(request: NextRequest) {
         return {
           companyRowKey: topic.company_row_key,
           council: `${topic.prefecture || ""}${topic.city || ""} / ${topic.council_date || ""}`,
+          prefecture: topic.prefecture || "",
+          city: topic.city || "",
           title: topic.title || "",
           summary: topic.summary || "",
           qa: `${topic.questioner || ""} / ${topic.answerer || ""}`,

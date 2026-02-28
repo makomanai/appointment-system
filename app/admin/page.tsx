@@ -52,10 +52,16 @@ export default function AdminPage() {
 
   // AI再判定用
   const [isReranking, setIsReranking] = useState(false);
+  const [rerankPreview, setRerankPreview] = useState<{
+    eligibleCount: number;
+    rankedCount: number;
+    totalCount: number;
+  } | null>(null);
   const [rerankResult, setRerankResult] = useState<{
     summary: { A: number; B: number; C: number };
     processed: number;
   } | null>(null);
+  const [showRerankConfirm, setShowRerankConfirm] = useState(false);
 
   // 認証チェック
   useEffect(() => {
@@ -109,10 +115,39 @@ export default function AdminPage() {
     }
   };
 
+  // AI再判定の対象件数を取得
+  const fetchRerankPreview = async (companyId: string) => {
+    try {
+      const response = await fetch(`/api/v2/topics/rerank?companyId=${companyId}`);
+      const result = await response.json();
+      if (result.success) {
+        setRerankPreview({
+          eligibleCount: result.eligibleCount,
+          rankedCount: result.rankedCount,
+          totalCount: result.totalCount,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch rerank preview:", error);
+      setRerankPreview(null);
+    }
+  };
+
   useEffect(() => {
     fetchAllCompanies();
     fetchStats();
   }, []);
+
+  // 企業選択時に再判定プレビューを取得
+  useEffect(() => {
+    if (selectedCompanyId) {
+      fetchRerankPreview(selectedCompanyId);
+      setShowRerankConfirm(false);
+      setRerankResult(null);
+    } else {
+      setRerankPreview(null);
+    }
+  }, [selectedCompanyId]);
 
   // メイン機能: CSVアップロードでデータ取込
   const handleImport = async () => {
@@ -198,6 +233,9 @@ export default function AdminPage() {
           processed: result.processed,
         });
         setMessage({ type: "success", text: result.message });
+        setShowRerankConfirm(false);
+        // プレビューを更新
+        await fetchRerankPreview(selectedCompanyId);
         await fetchStats();
       } else {
         setMessage({ type: "error", text: result.error || "AI再判定に失敗しました" });
@@ -531,27 +569,102 @@ export default function AdminPage() {
 
         {/* AI再判定（未判定分） */}
         <section className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="font-medium text-gray-800">AI再判定</h3>
               <p className="text-xs text-gray-500">未判定のトピックをAI判定する</p>
             </div>
-            <button
-              onClick={handleRerank}
-              disabled={isReranking || !selectedCompanyId}
-              className={`px-4 py-2 rounded-lg text-sm font-medium text-white ${
-                isReranking || !selectedCompanyId
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-purple-600 hover:bg-purple-700"
-              }`}
-            >
-              {isReranking ? "判定中..." : "実行"}
-            </button>
           </div>
+
+          {/* プレビュー表示 */}
+          {rerankPreview && selectedCompanyId && (
+            <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="grid grid-cols-3 gap-2 text-sm mb-2">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-purple-600">{rerankPreview.eligibleCount}</div>
+                  <div className="text-xs text-gray-500">対象</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-green-600">{rerankPreview.rankedCount}</div>
+                  <div className="text-xs text-gray-500">判定済</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-gray-600">{rerankPreview.totalCount}</div>
+                  <div className="text-xs text-gray-500">全件</div>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 border-t border-gray-200 pt-2 mt-2">
+                <p className="font-medium mb-1">対象条件:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>ai_ranked_at が NULL（AI未判定）</li>
+                  <li>is_archived = false（アーカイブなし）</li>
+                  <li>status ≠ 完了（未完了のみ）</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* アクションボタン */}
+          {rerankPreview && rerankPreview.eligibleCount > 0 ? (
+            !showRerankConfirm ? (
+              <button
+                onClick={() => setShowRerankConfirm(true)}
+                disabled={!selectedCompanyId}
+                className="w-full py-2 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400"
+              >
+                {rerankPreview.eligibleCount}件を再判定する
+              </button>
+            ) : (
+              <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-lg">
+                <p className="text-sm text-yellow-800 mb-2">
+                  <strong>{rerankPreview.eligibleCount}件</strong>のトピックをAI再判定します。よろしいですか？
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleRerank}
+                    disabled={isReranking}
+                    className={`flex-1 py-2 rounded text-sm font-medium text-white ${
+                      isReranking ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"
+                    }`}
+                  >
+                    {isReranking ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                        判定中...
+                      </span>
+                    ) : (
+                      "実行する"
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowRerankConfirm(false)}
+                    disabled={isReranking}
+                    className="flex-1 py-2 rounded text-sm font-medium bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            )
+          ) : rerankPreview ? (
+            <div className="text-center text-sm text-gray-500 py-2">
+              対象トピックがありません（全て判定済み）
+            </div>
+          ) : selectedCompanyId ? (
+            <div className="text-center text-sm text-gray-400 py-2">
+              読み込み中...
+            </div>
+          ) : (
+            <div className="text-center text-sm text-gray-400 py-2">
+              企業を選択してください
+            </div>
+          )}
+
+          {/* 結果表示 */}
           {rerankResult && (
-            <div className="mt-3 p-3 bg-purple-50 rounded text-sm">
+            <div className="mt-3 p-3 bg-purple-50 rounded text-sm border border-purple-200">
               <span className="text-purple-800">
-                {rerankResult.processed}件判定:
+                {rerankResult.processed}件判定完了:
                 A {rerankResult.summary.A} / B {rerankResult.summary.B} / C {rerankResult.summary.C}
               </span>
             </div>

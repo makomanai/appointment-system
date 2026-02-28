@@ -16,6 +16,10 @@ export interface SelectedCompany {
 export interface CallViewData {
   // A列: 議会/日付
   councilDate: string;
+  // 都道府県
+  prefecture: string;
+  // 市区町村
+  city: string;
   // B列: 議題タイトル
   agendaTitle: string;
   // C列: 議題概要
@@ -84,7 +88,7 @@ export interface ScriptStep {
 // スクリプトのステップ定義
 export const SCRIPT_STEPS = [
   { id: "reception", title: "【受付】担当者指名" },
-  { id: "chief", title: "【係長】共感・引用" },
+  { id: "chief", title: "【係長】趣旨説明・引用" },
   { id: "proposal", title: "【打診】ハードル下げ" },
   { id: "phase", title: "【フェーズ確認】" },
   { id: "counter", title: "【切り返し】" },

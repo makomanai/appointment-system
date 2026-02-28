@@ -102,6 +102,8 @@ export default function Home() {
         // eslint-disable-next-line
         const mappedData: CallViewData[] = (result.data || []).map((item: any) => ({
           councilDate: item.council || "",
+          prefecture: item.prefecture || "",
+          city: item.city || "",
           agendaTitle: item.title || "",
           agendaSummary: item.summary || "",
           speakers: item.qa || "",
@@ -311,6 +313,8 @@ export default function Home() {
         },
         body: JSON.stringify({
           councilDate: currentData.councilDate,
+          prefecture: currentData.prefecture,
+          city: currentData.city,
           agendaTitle: currentData.agendaTitle,
           agendaSummary: currentData.agendaSummary,
           speakers: currentData.speakers,
